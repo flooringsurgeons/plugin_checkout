@@ -27,7 +27,7 @@ class Assets
                 FLS_CHECKOUT_FLOW_URL . 'vendor/preline/preline.js',
                 [],
                 $this->asset_version('vendor/preline/preline.js'),
-                true
+	            ['in_footer' => true]
             );
         }
 
@@ -36,7 +36,7 @@ class Assets
             FLS_CHECKOUT_FLOW_URL . 'dist/js/frontend.js',
             ['jquery'],
             $this->asset_version('dist/js/frontend.js'),
-            true
+            ['in_footer' => true]
         );
     }
 
