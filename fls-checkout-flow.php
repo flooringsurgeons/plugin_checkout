@@ -5,6 +5,7 @@
  * Version:           2.0.0
  * Text Domain:       fls-checkout-flow
  * Domain Path:       /languages
+ * Requires Plugins:  woocommerce
  */
 
 defined('ABSPATH') || exit;
@@ -19,6 +20,11 @@ if (!defined('FLS_CHECKOUT_FLOW_PATH')) {
 
 if (!defined('FLS_CHECKOUT_FLOW_URL')) {
     define('FLS_CHECKOUT_FLOW_URL', plugin_dir_url(__FILE__));
+}
+
+if (! defined('FLS_CHECKOUT_FLOW_VERSION')) {
+	$plugin_data = get_file_data(__FILE__, ['Version' => 'Version'], 'plugin');
+	define('FLS_CHECKOUT_FLOW_VERSION', $plugin_data['Version'] ?: '2.0.0');
 }
 
 spl_autoload_register(static function ($class) {

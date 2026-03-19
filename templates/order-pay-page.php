@@ -9,7 +9,8 @@ get_header('onlymobile');
     <section class="fls-checkout-hero">
         <div class="fls-checkout-container">
             <div class="fls-order-pay-card">
-                <h1 class="fls-checkout-title"><?php esc_html_e('Order Pay', 'fls-checkout-flow'); ?></h1>
+                <h1 class="fls-checkout-title"><?php esc_html_e('پرداخت سفارش', 'fls-checkout-flow'); ?></h1>
+                <p class="fls-checkout-text"><?php esc_html_e('این صفحه برای order-pay است؛ یعنی وقتی ووکامرس از کاربر می‌خواهد هزینه یک سفارش موجود را پرداخت یا دوباره پرداخت کند. ظاهر صفحه از پلاگین می‌آید ولی محتوای اصلی پرداخت همان محتوای ووکامرس است.', 'fls-checkout-flow'); ?></p>
             </div>
 
             <div class="fls-order-pay-card" style="margin-top: 24px;">

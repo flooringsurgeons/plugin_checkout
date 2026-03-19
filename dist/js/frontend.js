@@ -1,3 +1,5 @@
+// English comments only
+
 (function ($) {
   function initPreline() {
     if (window.HSStaticMethods && typeof window.HSStaticMethods.autoInit === 'function') {
@@ -14,67 +16,70 @@
     }
 
     var order = ['details', 'shipping', 'payment'];
-    var $buttons = $root.find('[data-fls-step]');
-    var $panes = $root.find('[data-fls-step-pane]');
-    var $lines = $root.find('[data-fls-step-line]');
+    var $stepButtons = $root.find('[data-fls-step-target]');
+    var $stepPanels = $root.find('[data-fls-step-panel]');
+    var $connectors = $root.find('[data-fls-step-connector]');
 
-    function setCurrent(stepKey) {
+    function setCurrentStep(stepKey) {
       var currentIndex = order.indexOf(stepKey);
 
       if (currentIndex === -1) {
         currentIndex = 0;
+        stepKey = order[0];
       }
 
-      $buttons.each(function () {
+      $stepButtons.each(function (index) {
         var $button = $(this);
-        var key = $button.data('fls-step');
-        var index = order.indexOf(key);
 
-        $button.removeClass('is-active is-complete is-inactive');
+        $button.removeClass('is-active is-complete is-upcoming');
+        $button.removeAttr('aria-current');
 
         if (index < currentIndex) {
-          $button.addClass('is-complete').attr('aria-current', 'false');
+          $button.addClass('is-complete');
         } else if (index === currentIndex) {
-          $button.addClass('is-active').attr('aria-current', 'step');
+          $button.addClass('is-active');
+          $button.attr('aria-current', 'step');
         } else {
-          $button.addClass('is-inactive').attr('aria-current', 'false');
+          $button.addClass('is-upcoming');
         }
       });
 
-      $lines.each(function () {
-        var $line = $(this);
-        var lineIndex = Number($line.data('fls-step-line-index'));
+      $connectors.each(function (index) {
+        var $connector = $(this);
 
-        $line.removeClass('is-active is-complete is-inactive');
+        $connector.removeClass('is-active is-complete is-upcoming');
 
-        if (lineIndex < currentIndex) {
-          $line.addClass('is-complete');
-        } else if (lineIndex === currentIndex) {
-          $line.addClass('is-active');
+        if (index < currentIndex) {
+          $connector.addClass('is-complete');
+        } else if (index === currentIndex) {
+          $connector.addClass('is-active');
         } else {
-          $line.addClass('is-inactive');
+          $connector.addClass('is-upcoming');
         }
       });
 
-      $panes.each(function () {
-        var $pane = $(this);
-        var paneKey = $pane.data('fls-step-pane');
-        var isMatch = paneKey === stepKey;
+      $stepPanels.each(function () {
+        var $panel = $(this);
+        var panelKey = String($panel.data('fls-step-panel'));
+        var isMatch = panelKey === stepKey;
 
-        $pane.toggleClass('is-hidden', !isMatch);
-        $pane.attr('aria-hidden', isMatch ? 'false' : 'true');
+        $panel.toggleClass('is-active', isMatch);
+        $panel.toggleClass('is-hidden', !isMatch);
+        $panel.attr('aria-hidden', isMatch ? 'false' : 'true');
       });
 
       initPreline();
     }
 
-    $root.on('click', '[data-fls-step], [data-fls-go-step]', function (event) {
+    $root.on('click', '[data-fls-step-target], [data-fls-go-step]', function (event) {
       event.preventDefault();
-      setCurrent($(this).data('flsStep') || $(this).data('flsGoStep'));
+
+      var stepKey = $(this).data('flsStepTarget') || $(this).data('flsGoStep');
+      setCurrentStep(String(stepKey));
     });
 
-    var initialStep = $root.find('[data-fls-step].is-active').data('flsStep') || 'details';
-    setCurrent(initialStep);
+    var initialStep = String($root.find('[data-fls-step-target].is-active').first().data('flsStepTarget') || 'details');
+    setCurrentStep(initialStep);
   }
 
   $(document).ready(function () {
