@@ -1,6 +1,4 @@
 (function ($) {
-    'use strict';
-
     var totalSteps = 3;
     var animationDuration = 240;
     var flatpickrInstances = {};
