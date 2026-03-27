@@ -4,7 +4,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-class FLS_Checkout_Flow {
+final class FLS_Checkout_Flow {
     private static $instance = null;
 
     public static function init() {
@@ -20,11 +20,11 @@ class FLS_Checkout_Flow {
         add_action( 'plugins_loaded', array( $this, 'boot' ), 20 );
     }
 
-    public function load_textdomain(): void {
+    public function load_textdomain() {
         load_plugin_textdomain( 'fls-checkout-flow', false, dirname( plugin_basename( FLS_CHECKOUT_FLOW_FILE ) ) . '/languages' );
     }
 
-    public function boot(): void {
+    public function boot() {
         if ( ! class_exists( 'WooCommerce' ) ) {
             add_action( 'admin_notices', array( $this, 'woocommerce_missing_notice' ) );
             return;
@@ -50,7 +50,7 @@ class FLS_Checkout_Flow {
         add_action( 'woocommerce_checkout_create_order', array( $this, 'save_step_two_fields' ), 20, 2 );
     }
 
-    public function woocommerce_missing_notice(): void {
+    public function woocommerce_missing_notice() {
         if ( ! current_user_can( 'activate_plugins' ) ) {
             return;
         }
@@ -88,39 +88,39 @@ class FLS_Checkout_Flow {
         return file_exists( $custom_template ) ? $custom_template : $template;
     }
 
-    public function enqueue_assets(): void {
+    public function enqueue_assets() {
         if ( ! $this->should_override_checkout() ) {
             return;
         }
 
         wp_enqueue_style(
             'fls-checkout-flow-flatpickr',
-	        FLS_CHECKOUT_FLOW_URL . 'assets/flatpickr/flatpickr.min.css',
+            FLS_CHECKOUT_FLOW_URL . 'assets/vendor/flatpickr/flatpickr.min.css',
             array(),
-            '4.6.13'
+            '4.6.13-local'
         );
 
         wp_enqueue_style(
             'fls-checkout-flow',
             FLS_CHECKOUT_FLOW_URL . 'assets/css/checkout.css',
             array( 'fls-checkout-flow-flatpickr' ),
-            '2.4.0'
+            '2.6.0'
         );
 
         wp_enqueue_script(
             'fls-checkout-flow-flatpickr',
-	        FLS_CHECKOUT_FLOW_URL . 'assets/flatpickr/flatpickr.min.js',
+            FLS_CHECKOUT_FLOW_URL . 'assets/vendor/flatpickr/flatpickr.min.js',
             array(),
-            '4.6.13',
-            ['in_footer' => true]
+            '4.6.13-local',
+            true
         );
 
         wp_enqueue_script(
             'fls-checkout-flow',
             FLS_CHECKOUT_FLOW_URL . 'assets/js/checkout.js',
             array( 'jquery', 'wc-checkout', 'fls-checkout-flow-flatpickr' ),
-            '2.4.0',
-            ['in_footer' => true]
+            '2.6.0',
+            true
         );
 
         wp_localize_script(
@@ -239,7 +239,7 @@ class FLS_Checkout_Flow {
         return $fields;
     }
 
-    public function ship_to_different_address_checked( $checked ): bool {
+    public function ship_to_different_address_checked( $checked ) {
         if ( isset( $_POST['ship_to_different_address'] ) ) {
             return 1 === (int) wp_unslash( $_POST['ship_to_different_address'] );
         }
@@ -263,7 +263,7 @@ class FLS_Checkout_Flow {
         return $fragments;
     }
 
-    public function get_cart_items_count_label(): string {
+    public function get_cart_items_count_label() {
         $count = 0;
 
         if ( WC()->cart ) {
@@ -273,7 +273,7 @@ class FLS_Checkout_Flow {
         return sprintf( _n( '%d Item', '%d Items', $count, 'fls-checkout-flow' ), $count );
     }
 
-    public function get_checkout_logo_html(): string {
+    public function get_checkout_logo_html() {
         $logo = get_custom_logo();
 
         if ( ! empty( $logo ) ) {
@@ -283,7 +283,7 @@ class FLS_Checkout_Flow {
         return '<span class="fls-checkout-topbar__site-name">' . esc_html( get_bloginfo( 'name' ) ) . '</span>';
     }
 
-    public function get_checkout_account_url(): string {
+    public function get_checkout_account_url() {
         $redirect_to = function_exists( 'wc_get_checkout_url' ) ? wc_get_checkout_url() : home_url( '/' );
 
         if ( function_exists( 'wc_get_page_permalink' ) ) {
@@ -297,7 +297,7 @@ class FLS_Checkout_Flow {
         return wp_login_url( $redirect_to );
     }
 
-    public function render_account_redirect_field(): void {
+    public function render_account_redirect_field() {
         $redirect = $this->get_account_redirect_target();
 
         if ( empty( $redirect ) ) {
@@ -346,7 +346,7 @@ class FLS_Checkout_Flow {
         return wp_validate_redirect( $target, $fallback );
     }
 
-    public function get_order_details_html(): false|string {
+    public function get_order_details_html() {
         ob_start();
         ?>
         <div id="fls-checkout-order-details" class="fls-order-details">
@@ -436,7 +436,7 @@ class FLS_Checkout_Flow {
         return ob_get_clean();
     }
 
-    public function get_shipping_methods_html(): false|string {
+    public function get_shipping_methods_html() {
         ob_start();
         ?>
         <div id="fls-checkout-shipping-methods" class="fls-checkout-shipping-methods">
@@ -456,7 +456,7 @@ class FLS_Checkout_Flow {
         return ob_get_clean();
     }
 
-    public function get_shipping_customer_section_html( $checkout ): false|string {
+    public function get_shipping_customer_section_html( $checkout ) {
         ob_start();
         echo '<div class="fls-checkout-step__section fls-checkout-step__section--shipping-fields">';
 
@@ -478,7 +478,7 @@ class FLS_Checkout_Flow {
         return ob_get_clean();
     }
 
-    private function render_shipping_methods_markup(): void {
+    private function render_shipping_methods_markup() {
         $grouped_rates  = $this->get_grouped_shipping_rates();
         $delivery_rates = $grouped_rates['delivery'];
         $pickup_rates   = $grouped_rates['pickup'];
@@ -521,7 +521,7 @@ class FLS_Checkout_Flow {
                         <?php endforeach; ?>
                     </div>
 
-                    <div class="fls-delivery-method__date-row" data-fls-date-wrap="delivery" style="display:none;">
+                    <div class="fls-delivery-method__date-row" data-fls-date-wrap="delivery">
                         <label class="screen-reader-text" for="fls-delivery-date-display"><?php esc_html_e( 'Delivery date', 'fls-checkout-flow' ); ?></label>
                         <input id="fls-delivery-date-display" type="text" class="fls-delivery-method__date-input" data-fls-date-display="delivery" placeholder="<?php echo esc_attr__( 'Select Your Date', 'fls-checkout-flow' ); ?>" autocomplete="off" readonly />
                         <span class="fls-delivery-method__date-icon" aria-hidden="true">🗓</span>
@@ -548,7 +548,7 @@ class FLS_Checkout_Flow {
                         <?php endif; ?>
                     </div>
 
-                    <div class="fls-delivery-method__date-row" data-fls-date-wrap="pickup" style="display:none;">
+                    <div class="fls-delivery-method__date-row" data-fls-date-wrap="pickup">
                         <label class="screen-reader-text" for="fls-pickup-date-display"><?php esc_html_e( 'Pickup date', 'fls-checkout-flow' ); ?></label>
                         <input id="fls-pickup-date-display" type="text" class="fls-delivery-method__date-input" data-fls-date-display="pickup" placeholder="<?php echo esc_attr__( 'Select Your Date', 'fls-checkout-flow' ); ?>" autocomplete="off" readonly />
                         <span class="fls-delivery-method__date-icon" aria-hidden="true">🗓</span>
@@ -559,7 +559,7 @@ class FLS_Checkout_Flow {
         <?php
     }
 
-    private function render_shipping_rate_card( $shipping_rate_data, $mode ): void {
+    private function render_shipping_rate_card( $shipping_rate_data, $mode ) {
         $rate          = $shipping_rate_data['rate'];
         $title         = $this->get_rate_primary_label( $rate );
         $description   = $this->get_rate_secondary_label( $rate, $mode );
@@ -591,7 +591,7 @@ class FLS_Checkout_Flow {
         <?php
     }
 
-    private function get_grouped_shipping_rates(): array {
+    private function get_grouped_shipping_rates() {
         $packages       = WC()->shipping()->get_packages();
         $chosen_methods = WC()->session ? (array) WC()->session->get( 'chosen_shipping_methods', array() ) : array();
         $grouped        = array(
@@ -671,7 +671,7 @@ class FLS_Checkout_Flow {
         return apply_filters( 'fls_checkout_shipping_rate_description', '', $rate, $mode );
     }
 
-    private function rate_requires_date( $rate ): bool {
+    private function rate_requires_date( $rate ) {
         $requires_date = 'local_pickup' === $rate->get_method_id();
         $label         = strtolower( wp_strip_all_tags( (string) $rate->get_label() ) );
 
@@ -682,7 +682,7 @@ class FLS_Checkout_Flow {
         return (bool) apply_filters( 'fls_checkout_rate_requires_date', $requires_date, $rate );
     }
 
-    private function get_posted_checkout_value( $key ): string {
+    private function get_posted_checkout_value( $key ) {
         if ( isset( $_POST[ $key ] ) ) {
             return sanitize_text_field( wp_unslash( $_POST[ $key ] ) );
         }
@@ -719,7 +719,7 @@ class FLS_Checkout_Flow {
         return apply_filters( 'fls_checkout_pickup_location', $data, $rate );
     }
 
-    public function validate_step_two_fields(): void {
+    public function validate_step_two_fields() {
         if ( empty( $_POST['shipping_method'] ) || ! is_array( $_POST['shipping_method'] ) ) {
             return;
         }
@@ -729,12 +729,12 @@ class FLS_Checkout_Flow {
         $delivery_date          = isset( $_POST['fls_delivery_date'] ) ? sanitize_text_field( wp_unslash( $_POST['fls_delivery_date'] ) ) : '';
         $rate                   = $this->find_shipping_rate_by_id( $chosen_rate_id );
 
-        if ( $rate && $this->rate_requires_date( $rate ) && empty( $delivery_date ) ) {
+        if ( $rate && empty( $delivery_date ) ) {
             wc_add_notice( __( 'Please choose a date for your delivery method.', 'fls-checkout-flow' ), 'error' );
         }
     }
 
-    public function save_step_two_fields( $order, $data ): void {
+    public function save_step_two_fields( $order, $data ) {
         if ( ! empty( $_POST['fls_delivery_mode'] ) ) {
             $order->update_meta_data( '_fls_delivery_mode', sanitize_text_field( wp_unslash( $_POST['fls_delivery_mode'] ) ) );
         }
@@ -758,7 +758,7 @@ class FLS_Checkout_Flow {
         return null;
     }
 
-    private function get_shipping_rate_cost_html( $rate ): string {
+    private function get_shipping_rate_cost_html( $rate ) {
         $cost  = (float) $rate->get_cost();
         $taxes = array_sum( (array) $rate->get_taxes() );
         $total = $cost + (float) $taxes;
@@ -770,7 +770,7 @@ class FLS_Checkout_Flow {
         return wc_price( $total );
     }
 
-    public function get_payment_html( $checkout ): false|string {
+    public function get_payment_html( $checkout ) {
         ob_start();
         ?>
         <div id="fls-checkout-payment" class="fls-checkout-payment">
@@ -781,7 +781,7 @@ class FLS_Checkout_Flow {
         return ob_get_clean();
     }
 
-    private function get_shipping_total_html(): string {
+    private function get_shipping_total_html() {
         if ( ! WC()->cart->needs_shipping() ) {
             return esc_html__( 'Free', 'woocommerce' );
         }
@@ -795,13 +795,13 @@ class FLS_Checkout_Flow {
         return wc_price( $shipping_total );
     }
 
-    private function get_total_tax_amount(): float|int {
+    private function get_total_tax_amount() {
         $totals = WC()->cart->get_totals();
 
         return isset( $totals['total_tax'] ) ? (float) $totals['total_tax'] : 0;
     }
 
-    private function should_override_checkout(): bool {
+    private function should_override_checkout() {
         if ( is_admin() || wp_doing_ajax() ) {
             return false;
         }

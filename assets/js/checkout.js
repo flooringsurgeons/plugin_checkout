@@ -1,4 +1,6 @@
 (function ($) {
+    'use strict';
+
     var totalSteps = 3;
     var animationDuration = 240;
     var flatpickrInstances = {};
@@ -84,7 +86,21 @@
         $('[data-fls-delivery-panel]').each(function () {
             var $panel = $(this);
             var currentMode = $panel.attr('data-fls-delivery-panel');
-            $panel.toggleClass('is-active', currentMode === mode);
+            var active = currentMode === mode;
+
+            $panel.toggleClass('is-active', active);
+
+            if (active) {
+                if (!$panel.is(':visible')) {
+                    $panel.stop(true, true).hide().slideDown(animationDuration, function () {
+                        $panel.css('display', 'grid');
+                    });
+                } else {
+                    $panel.css('display', 'grid');
+                }
+            } else if ($panel.is(':visible')) {
+                $panel.stop(true, true).slideUp(animationDuration);
+            }
         });
     }
 
@@ -113,8 +129,7 @@
     }
 
     function selectedRateRequiresDate(mode) {
-        var $card = getSelectedShippingCard(mode);
-        return $card.length && parseInt($card.attr('data-requires-date'), 10) === 1;
+        return WCNeedsShipping() && getSelectedShippingCard(mode).length > 0;
     }
 
     function syncSelectedShippingCards() {
@@ -140,23 +155,26 @@
 
     function syncDeliveryHiddenFields() {
         var mode = getActiveDeliveryMode();
-        var requiresDate = selectedRateRequiresDate(mode);
         $('[data-fls-delivery-mode-input]').val(mode);
-        $('[data-fls-delivery-date-input]').val(requiresDate ? getDateForMode(mode) : '');
+        $('[data-fls-delivery-date-input]').val(getDateForMode(mode));
     }
 
     function syncDeliveryUi() {
         var mode = getActiveDeliveryMode();
-        var requiresDate = selectedRateRequiresDate(mode);
         var currentDate = getDateForMode(mode);
         var $dateWrap = $('[data-fls-date-wrap="' + mode + '"]');
         var $pickupDetails = $('[data-fls-pickup-details]');
 
-        $('[data-fls-date-wrap]').hide().removeClass('is-invalid');
         $('[data-fls-date-display]').each(function () {
             var inputMode = $(this).attr('data-fls-date-display');
             $(this).val(getDateForMode(inputMode));
         });
+
+        $('[data-fls-date-wrap]').not($dateWrap).hide().removeClass('is-invalid');
+        if ($dateWrap.length && !$dateWrap.is(':visible')) {
+            $dateWrap.stop(true, true).slideDown(animationDuration);
+        }
+        $dateWrap.removeClass('is-invalid').find('[data-fls-date-display]').val(currentDate);
 
         if (mode === 'pickup') {
             if (getSelectedShippingCard('pickup').length) {
@@ -165,12 +183,7 @@
                 $pickupDetails.stop(true, true).slideUp(animationDuration);
             }
         } else {
-            $pickupDetails.hide();
-        }
-
-        if (requiresDate) {
-            $dateWrap.stop(true, true).slideDown(animationDuration);
-            $dateWrap.find('[data-fls-date-display]').val(currentDate);
+            $pickupDetails.stop(true, true).slideUp(animationDuration);
         }
 
         syncDeliveryHiddenFields();
@@ -252,7 +265,7 @@
             return false;
         }
 
-        if (selectedRateRequiresDate(mode) && !getDateForMode(mode)) {
+        if (!getDateForMode(mode)) {
             return false;
         }
 
@@ -282,8 +295,10 @@
             }
 
             if (shouldOpen) {
-                $body.stop(true, true).slideDown(animationDuration);
-            } else {
+                if (!$body.is(':visible')) {
+                    $body.stop(true, true).slideToggle(animationDuration);
+                }
+            } else if ($body.is(':visible')) {
                 $body.stop(true, true).slideUp(animationDuration);
             }
         });
@@ -333,8 +348,12 @@
 
         $('.fls-checkout-steps-nav__line').each(function (index) {
             var stepNumber = index + 1;
-            var isActiveLine = !!state.steps[stepNumber].completed || step > stepNumber || (stepNumber === 1 && step === 1);
-            $(this).toggleClass('is-active', isActiveLine);
+            var isComplete = !!state.steps[stepNumber].completed && step > stepNumber;
+            var isActive = stepNumber === step && step < totalSteps;
+
+            $(this)
+                .toggleClass('is-complete', isComplete)
+                .toggleClass('is-active', isActive);
         });
 
         toggleStepPanels(step, immediate);
@@ -354,18 +373,43 @@
         return maxAllowedStep;
     }
 
+    function refreshPaymentUi() {
+        var $payment = $('#fls-checkout-payment');
+
+        if (!$payment.length) {
+            return;
+        }
+
+        setTimeout(function () {
+            $(document.body).trigger('update_checkout');
+
+            setTimeout(function () {
+                var $selectedMethod = $payment.find('input[name="payment_method"]:checked');
+                if ($selectedMethod.length) {
+                    $selectedMethod.trigger('change');
+                }
+                $(document.body).trigger('payment_method_selected');
+            }, 420);
+        }, 80);
+    }
+
     function setStep(step, options) {
         options = options || {};
 
         var state = getState();
         var immediate = !!options.immediate;
         var maxAllowedStep = getMaxAllowedStep();
+        var previousStep = state.activeStep || 1;
 
         step = Math.max(1, Math.min(step, maxAllowedStep));
         state.steps[step].available = true;
         state.activeStep = step;
 
         syncStepUi(step, immediate);
+
+        if (step === 3 && previousStep !== 3) {
+            refreshPaymentUi();
+        }
     }
 
     function maybeDowngradeCompletedState() {
@@ -411,7 +455,7 @@
                 return;
             }
 
-            if (selectedRateRequiresDate(getActiveDeliveryMode()) && !getDateForMode(getActiveDeliveryMode())) {
+            if (!getDateForMode(getActiveDeliveryMode())) {
                 $('[data-fls-date-wrap="' + getActiveDeliveryMode() + '"]').addClass('is-invalid');
                 showStepMessage('error', getI18nMessage('stepTwoDateError', 'Please choose a date before continuing.'));
                 setStep(2);
@@ -613,6 +657,7 @@
         $('[data-fls-date-display]').each(function () {
             var input = this;
             var mode = $(input).attr('data-fls-date-display');
+            var $wrap = $(input).closest('[data-fls-date-wrap]');
 
             if (flatpickrInstances[mode]) {
                 flatpickrInstances[mode].setDate(getDateForMode(mode), false, 'F j, Y');
@@ -624,6 +669,26 @@
                 dateFormat: 'F j, Y',
                 disableMobile: true,
                 defaultDate: getDateForMode(mode) || null,
+                allowInput: false,
+                clickOpens: true,
+                static: true,
+                appendTo: $wrap.length ? $wrap.get(0) : undefined,
+                positionElement: input,
+                onReady: function (selectedDates, dateStr, instance) {
+                    if (instance && instance.calendarContainer) {
+                        $(instance.calendarContainer).addClass('fls-flatpickr-calendar');
+                    }
+                },
+                onOpen: function (selectedDates, dateStr, instance) {
+                    if (instance && instance.calendarContainer) {
+                        $(instance.calendarContainer).closest('[data-fls-date-wrap]').addClass('is-open');
+                    }
+                },
+                onClose: function (selectedDates, dateStr, instance) {
+                    if (instance && instance.calendarContainer) {
+                        $(instance.calendarContainer).closest('[data-fls-date-wrap]').removeClass('is-open');
+                    }
+                },
                 onChange: function (selectedDates, dateStr) {
                     setDateForMode(mode, dateStr);
                     $('[data-fls-date-wrap="' + mode + '"]').removeClass('is-invalid');
@@ -633,6 +698,47 @@
                 }
             });
         });
+    }
+
+    function openDatePicker(mode) {
+        if (!mode) {
+            return;
+        }
+
+        if (!flatpickrInstances[mode]) {
+            initFlatpickrInputs();
+        }
+
+        if (flatpickrInstances[mode] && typeof flatpickrInstances[mode].open === 'function') {
+            if (typeof flatpickrInstances[mode].redraw === 'function') {
+                flatpickrInstances[mode].redraw();
+            }
+            flatpickrInstances[mode].open();
+            return;
+        }
+
+        var $input = $('[data-fls-date-display="' + mode + '"]').first();
+        if ($input.length) {
+            $input.trigger('focus').trigger('click');
+        }
+    }
+
+    function bindDatePickerOpeners() {
+        $(document)
+            .off('click.flsDatePickerOpen')
+            .on('click.flsDatePickerOpen', '[data-fls-date-display], .fls-delivery-method__date-icon', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                var $target = $(this);
+                var mode = $target.attr('data-fls-date-display');
+
+                if (!mode) {
+                    mode = $target.closest('[data-fls-date-wrap]').attr('data-fls-date-wrap');
+                }
+
+                openDatePicker(mode);
+            });
     }
 
     function bindCompletionWatchers() {
@@ -672,6 +778,7 @@
         bindCouponForm();
         bindAddressChoice();
         bindDeliveryMethodEvents();
+        bindDatePickerOpeners();
         bindCompletionWatchers();
         updateAddressChoiceUi();
         syncShippingAddressVisibility(!!immediate);
