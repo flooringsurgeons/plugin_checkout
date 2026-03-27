@@ -1,60 +1,28 @@
 <?php
 
-defined('ABSPATH') || exit;
+defined( 'ABSPATH' ) || exit;
 
-use FLS_Checkout_Flow\Support\Template;
-
-$current_step = 'details';
-$steps = [
-    'details' => [
-        'label' => __('Details', 'fls-checkout-flow'),
-        'icon'  => 'user',
-    ],
-    'shipping' => [
-        'label' => __('Shipping', 'fls-checkout-flow'),
-        'icon'  => 'truck',
-    ],
-    'payment' => [
-        'label' => __('Payment', 'fls-checkout-flow'),
-        'icon'  => 'card',
-    ],
-];
-
-get_header('onlymobile');
+get_header( 'noheader' );
 ?>
+<main id="primary" class="fls-checkout-page">
+    <div class="fls-checkout-page__inner">
+        <?php do_action( 'fls_checkout_page_before_content' ); ?>
 
-<main class="fls-checkout-flow fls-checkout-flow--checkout">
-    <section class="fls-checkout-section">
-        <div class="fls-checkout-container">
-            <div class="fls-checkout-shell">
-                <?php Template::render('parts/stepper', [
-                    'steps'        => $steps,
-                    'current_step' => $current_step,
-                ]); ?>
+        <?php
+        while ( have_posts() ) :
+            the_post();
 
-                <div class="fls-checkout-layout">
-                    <div class="fls-checkout-main">
-                        <?php Template::render('steps/details', [
-                            'current_step' => $current_step,
-                        ]); ?>
+            wc_get_template(
+                'checkout/form-checkout.php',
+                array(
+                    'checkout' => WC()->checkout(),
+                )
+            );
+        endwhile;
+        ?>
 
-                        <?php Template::render('steps/shipping', [
-                            'current_step' => $current_step,
-                        ]); ?>
-
-                        <?php Template::render('steps/payment', [
-                            'current_step' => $current_step,
-                        ]); ?>
-                    </div>
-
-                    <aside class="fls-checkout-sidebar">
-                        <?php Template::render('sidebar/order-details'); ?>
-                    </aside>
-                </div>
-            </div>
-        </div>
-    </section>
+        <?php do_action( 'fls_checkout_page_after_content' ); ?>
+    </div>
 </main>
-
 <?php
-get_footer('nofooter');
+get_footer( 'nofooter' );
