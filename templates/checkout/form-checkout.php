@@ -64,7 +64,7 @@ if ( ! $checkout->is_registration_enabled() && $checkout->is_registration_requir
                 <span class="fls-checkout-steps-nav__label"><?php esc_html_e( 'Payment', 'fls-checkout-flow' ); ?></span>
             </button>
 
-            <?php if (is_user_logged_in()): ?>
+            <?php if (!is_user_logged_in()): ?>
                 <a class="fls-checkout-steps-nav__account" href="<?= esc_url( $flow->get_checkout_account_url() ); ?>">
 		            <?= esc_html( __( 'Login/Register', 'fls-checkout-flow' ) ); ?>
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
