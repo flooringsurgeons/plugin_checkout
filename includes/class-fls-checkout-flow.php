@@ -1,8 +1,5 @@
 <?php
-
-if ( ! defined( 'ABSPATH' ) ) {
-	exit;
-}
+defined( 'ABSPATH' ) || exit;
 
 class FLS_Checkout_Flow {
 	private static $instance = null;
@@ -137,10 +134,12 @@ class FLS_Checkout_Flow {
 					'stepTwoError'      => __( 'Please choose a delivery option before continuing.', 'fls-checkout-flow' ),
 					'stepTwoDateError'  => __( 'Please choose a date before continuing.', 'fls-checkout-flow' ),
 					'chooseDate'        => __( 'Select your date', 'fls-checkout-flow' ),
-					'discountApplied'   => __( 'Discount Applied', 'fls-checkout-flow' ),
-					'couponEmpty'       => __( 'Please enter a discount code.', 'fls-checkout-flow' ),
-					'couponDeleteLabel' => __( 'Delete', 'fls-checkout-flow' ),
-					'couponApplyLabel'  => __( 'Apply', 'woocommerce' ),
+					'discountApplied'  => __( 'Discount Applied', 'fls-checkout-flow' ),
+					'couponRemoved'    => __( 'Coupon has been removed.', 'woocommerce' ),
+					'couponEmpty'      => __( 'Please enter a discount code.', 'fls-checkout-flow' ),
+					'couponApplyError' => __( 'Something went wrong while applying the coupon.', 'fls-checkout-flow' ),
+					'couponRemoveError'=> __( 'Something went wrong while removing the coupon.', 'fls-checkout-flow' ),
+					'couponApplyLabel' => __( 'Apply', 'woocommerce' ),
 				),
 			)
 		);
@@ -291,7 +290,9 @@ class FLS_Checkout_Flow {
 			return $logo;
 		}
 
-		return '<span class="fls-checkout-topbar__site-name">' . esc_html( get_bloginfo( 'name' ) ) . '</span>';
+        $site_logo = FLS_CHECKOUT_FLOW_URL .'assets/image/svg/site-logo.svg';
+
+		return '<a href="' . esc_url( home_url() ) . '" class="fls-checkout-topbar__site-name"><img src="' . esc_html( $site_logo ) . '" alt="flooring surgeons"></a>';
 	}
 
 	public function get_checkout_account_url() {
@@ -438,23 +439,6 @@ class FLS_Checkout_Flow {
 		return $product ? $product->get_image( 'woocommerce_thumbnail' ) : '';
 	}
 
-	private function is_individual_use_coupon( $code ) {
-		if ( empty( $code ) ) {
-			return false;
-		}
-
-		$coupon = new WC_Coupon( $code );
-
-		if ( ! $coupon || ! $coupon->get_id() ) {
-			return false;
-		}
-
-		return (bool) $coupon->get_individual_use();
-	}
-
-	private function has_locked_single_coupon( $applied_coupons ) {
-		return 1 === count( $applied_coupons ) && $this->is_individual_use_coupon( $applied_coupons[0] );
-	}
 
 	private function get_manual_vat_breakdown_data() {
 		$data = array(
@@ -541,9 +525,7 @@ class FLS_Checkout_Flow {
 			}
 		}
 
-		$applied_coupons          = array_values( WC()->cart->get_applied_coupons() );
-		$coupon_count             = count( $applied_coupons );
-		$has_locked_single_coupon = $this->has_locked_single_coupon( $applied_coupons );
+		$applied_coupons = array_values( WC()->cart->get_applied_coupons() );
 
 		foreach ( $applied_coupons as $code ) {
 			$coupon_amount = (float) WC()->cart->get_coupon_discount_amount( $code ) + (float) WC()->cart->get_coupon_discount_tax_amount( $code );
@@ -552,14 +534,12 @@ class FLS_Checkout_Flow {
 				continue;
 			}
 
-			$is_locked_single_coupon = $has_locked_single_coupon && 1 === $coupon_count;
-
 			$rows[] = array(
 				'label'     => wc_format_coupon_code( $code ),
 				'code'      => $code,
 				'amount'    => $coupon_amount,
 				'type'      => 'coupon',
-				'removable' => ! $is_locked_single_coupon,
+				'removable' => true,
 			);
 
 			$total += $coupon_amount;
@@ -571,20 +551,51 @@ class FLS_Checkout_Flow {
 		);
 	}
 
+	private function get_coupon_block_html() {
+		ob_start();
+		?>
+		<?php if ( wc_coupons_enabled() ) : ?>
+            <div class="fls-order-details__coupon-block" data-fls-coupon-block>
+                <h4 class="fls-order-details__block-title"><?php esc_html_e( 'Have Discount Code?', 'fls-checkout-flow' ); ?></h4>
+
+                <div class="fls-order-details__coupon-form" data-fls-coupon-form>
+                    <div class="fls-order-details__coupon-input-wrap">
+                        <input
+                                id="fls_coupon_code"
+                                type="text"
+                                name="coupon_code"
+                                class="fls-order-details__coupon-input"
+                                value=""
+                                placeholder="<?php echo esc_attr__( 'Enter Discount Code', 'fls-checkout-flow' ); ?>"
+                                autocomplete="off"
+                        />
+                    </div>
+
+                    <button type="button" class="fls-order-details__coupon-button" data-fls-coupon-submit>
+						<?php echo esc_html__( 'Apply', 'woocommerce' ); ?>
+                    </button>
+                </div>
+
+				<?php if ( floorista_option( 'show_coupon_limit_text' ) ) : ?>
+                    <p class="fls-order__coupon_limit_text"><?php esc_html_e( 'Only one discount code can be used per order', 'fls-checkout-flow' ); ?></p>
+				<?php endif; ?>
+            </div>
+		<?php endif; ?>
+		<?php
+
+		return ob_get_clean();
+	}
+
 	public function get_order_details_html() {
-		$applied_coupons          = WC()->cart ? array_values( WC()->cart->get_applied_coupons() ) : array();
-		$coupon_count             = count( $applied_coupons );
-		$has_locked_single_coupon = $this->has_locked_single_coupon( $applied_coupons );
-		$single_coupon_code       = $has_locked_single_coupon ? $applied_coupons[0] : '';
 		$discount_data            = $this->get_order_details_discount_rows();
 		$discount_rows            = $discount_data['rows'];
 		$discount_total           = $discount_data['total'];
-		$can_delete_single        = $has_locked_single_coupon;
 		$vat_data                 = $this->get_manual_vat_breakdown_data();
 
 		ob_start();
 		?>
         <div id="fls-checkout-order-details" class="fls-order-details">
+            <div class="fls-checkout-toast-stack" data-fls-toast-stack aria-live="polite" aria-atomic="true"></div>
             <div class="fls-order-details__card">
                 <div class="fls-order-details__header">
                     <div>
@@ -595,7 +606,9 @@ class FLS_Checkout_Flow {
 
                 <button class="fls-order-details__summary-toggle" type="button" data-fls-summary-toggle aria-expanded="false">
                     <span><?php esc_html_e( 'Basket Summary', 'fls-checkout-flow' ); ?></span>
-                    <span class="fls-order-details__summary-icon" aria-hidden="true">⌄</span>
+                    <span class="fls-order-details__summary-icon" aria-hidden="true">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 9L12 15L18 9" stroke="#020617" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </span>
                 </button>
 
                 <div class="fls-order-details__summary" data-fls-summary-body style="display:none;">
@@ -629,53 +642,7 @@ class FLS_Checkout_Flow {
 					<?php endforeach; ?>
                 </div>
 
-				<?php if ( wc_coupons_enabled() ) : ?>
-                    <div class="fls-order-details__coupon-block">
-                        <h4 class="fls-order-details__block-title"><?php esc_html_e( 'Have Discount Code?', 'fls-checkout-flow' ); ?></h4>
-
-                        <div
-                                class="fls-order-details__coupon-form"
-                                data-fls-coupon-form
-                                data-coupon-count="<?php echo esc_attr( $coupon_count ); ?>"
-                                data-delete-mode="<?php echo $can_delete_single ? '1' : '0'; ?>"
-                        >
-                            <div class="fls-order-details__coupon-input-wrap">
-                                <input
-                                        id="fls_coupon_code"
-                                        type="text"
-                                        name="coupon_code"
-                                        class="fls-order-details__coupon-input"
-                                        value="<?php echo esc_attr( $single_coupon_code ); ?>"
-                                        placeholder="<?php echo esc_attr__( 'Enter Discount Code', 'fls-checkout-flow' ); ?>"
-                                        autocomplete="off"
-									<?php echo $can_delete_single ? 'readonly' : ''; ?>
-                                />
-
-								<?php if ( $can_delete_single ) : ?>
-                                    <button
-                                            type="button"
-                                            class="fls-order-details__coupon-clear"
-                                            data-fls-coupon-remove
-                                            data-coupon-code="<?php echo esc_attr( $single_coupon_code ); ?>"
-                                            aria-label="<?php esc_attr_e( 'Remove discount code', 'fls-checkout-flow' ); ?>"
-                                    >
-                                        ×
-                                    </button>
-								<?php endif; ?>
-                            </div>
-
-                            <button type="button" class="fls-order-details__coupon-button" data-fls-coupon-submit>
-								<?php echo $can_delete_single ? esc_html__( 'Delete', 'fls-checkout-flow' ) : esc_html__( 'Apply', 'woocommerce' ); ?>
-                            </button>
-                        </div>
-
-                        <div class="fls-order-details__coupon-feedback" data-fls-coupon-feedback>
-							<?php if ( $coupon_count > 0 ) : ?>
-                                <span class="is-success"><?php esc_html_e( 'Discount Applied', 'fls-checkout-flow' ); ?></span>
-							<?php endif; ?>
-                        </div>
-                    </div>
-				<?php endif; ?>
+	            <?php echo $this->get_coupon_block_html(); ?>
 
                 <div class="fls-order-details__totals">
                     <div class="fls-order-details__row">
@@ -703,7 +670,7 @@ class FLS_Checkout_Flow {
                                             data-coupon-code="<?php echo esc_attr( $discount_row['code'] ); ?>"
                                             aria-label="<?php echo esc_attr( sprintf( __( 'Remove %s coupon', 'fls-checkout-flow' ), $discount_row['label'] ) ); ?>"
                                     >
-                                        ×
+                                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.99984 18.9582C5.05817 18.9582 1.0415 14.9415 1.0415 9.99984C1.0415 5.05817 5.05817 1.0415 9.99984 1.0415C14.9415 1.0415 18.9582 5.05817 18.9582 9.99984C18.9582 14.9415 14.9415 18.9582 9.99984 18.9582ZM9.99984 2.2915C5.74984 2.2915 2.2915 5.74984 2.2915 9.99984C2.2915 14.2498 5.74984 17.7082 9.99984 17.7082C14.2498 17.7082 17.7082 14.2498 17.7082 9.99984C17.7082 5.74984 14.2498 2.2915 9.99984 2.2915Z" fill="#E60023"/><path d="M7.64147 12.9831C7.48314 12.9831 7.3248 12.9248 7.1998 12.7998C6.95814 12.5581 6.95814 12.1581 7.1998 11.9165L11.9165 7.1998C12.1581 6.95814 12.5581 6.95814 12.7998 7.1998C13.0415 7.44147 13.0415 7.84147 12.7998 8.08314L8.08314 12.7998C7.96647 12.9248 7.7998 12.9831 7.64147 12.9831Z" fill="#E60023"/><path d="M12.3581 12.9831C12.1998 12.9831 12.0415 12.9248 11.9165 12.7998L7.1998 8.08314C6.95814 7.84147 6.95814 7.44147 7.1998 7.1998C7.44147 6.95814 7.84147 6.95814 8.08314 7.1998L12.7998 11.9165C13.0415 12.1581 13.0415 12.5581 12.7998 12.7998C12.6748 12.9248 12.5165 12.9831 12.3581 12.9831Z" fill="#E60023"/></svg>
                                     </button>
 								<?php endif; ?>
                             </span>
@@ -717,10 +684,12 @@ class FLS_Checkout_Flow {
                                 data-fls-vat-toggle
                                 aria-expanded="false"
                         >
-		<span class="fls-order-details__vat-label">
-			<span><?php esc_html_e( 'VAT Breakdown', 'fls-checkout-flow' ); ?></span>
-			<span class="fls-order-details__vat-arrow" aria-hidden="true">⌄</span>
-		</span>
+		                <span class="fls-order-details__vat-label">
+			                <span><?php esc_html_e( 'VAT Breakdown', 'fls-checkout-flow' ); ?></span>
+			                <span class="fls-order-details__vat-arrow" aria-hidden="true">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 6L8 10L12 6" stroke="#4B5563" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            </span>
+		                </span>
                             <span><?php echo wp_kses_post( wc_price( $vat_data['total'] ) ); ?></span>
                         </button>
 
@@ -737,22 +706,32 @@ class FLS_Checkout_Flow {
                         </div>
                     </div>
 
-	                <?php if ( $discount_total > 0 ) : ?>
-                        <div class="fls-order-details__row fls-order-details__row--discount-total">
-                            <span><?php esc_html_e( 'Discount total', 'fls-checkout-flow' ); ?></span>
-                            <span class="fls-order-details__row-value fls-order-details__row-value--discount">- <?php echo wp_kses_post( wc_price( $discount_total ) ); ?></span>
-                        </div>
-	                <?php endif; ?>
+                    <div class="fls-order-details__row--total">
+	                    <?php if ( $discount_total > 0 ) : ?>
+                            <div class="fls-order-details__row fls-order-details__row--discount-total">
+                                <span><?php esc_html_e( 'Discount total', 'fls-checkout-flow' ); ?></span>
+                                <span class="fls-order-details__row-value fls-order-details__row-value--discount">- <?php echo wp_kses_post( wc_price( $discount_total ) ); ?></span>
+                            </div>
+	                    <?php endif; ?>
 
-                    <div class="fls-order-details__row fls-order-details__row--total">
-                        <span><?php esc_html_e( 'Total', 'woocommerce' ); ?></span>
-                        <strong><?php echo wp_kses_post( wc_price( $vat_data['total'] ) ); ?></strong>
+                        <div class="fls-order-details__row">
+                            <span><?php esc_html_e( 'Total', 'woocommerce' ); ?></span>
+                            <strong><?php echo wp_kses_post( wc_price( $vat_data['total'] ) ); ?></strong>
+                        </div>
                     </div>
                 </div>
 
                 <div class="fls-order-details__assurance">
-                    <span><?php esc_html_e( 'Free returns within 30 days', 'fls-checkout-flow' ); ?></span>
-                    <span><?php esc_html_e( 'Price match guarantee', 'fls-checkout-flow' ); ?></span>
+                    <span>
+                        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="0.5" y="0.5" width="31" height="31" rx="15.5" fill="white"/><rect x="0.5" y="0.5" width="31" height="31" rx="15.5" stroke="#E5E7EB"/><path d="M15.3333 22.486C15.536 22.603 15.766 22.6646 16 22.6646C16.234 22.6646 16.464 22.603 16.6667 22.486L21.3333 19.8193C21.5358 19.7024 21.704 19.5343 21.821 19.3318C21.938 19.1294 21.9998 18.8998 22 18.666V13.3326C21.9998 13.0988 21.938 12.8692 21.821 12.6667C21.704 12.4643 21.5358 12.2962 21.3333 12.1793L16.6667 9.51262C16.464 9.39559 16.234 9.33398 16 9.33398C15.766 9.33398 15.536 9.39559 15.3333 9.51262L10.6667 12.1793C10.4642 12.2962 10.296 12.4643 10.179 12.6667C10.062 12.8692 10.0002 13.0988 10 13.3326V18.666C10.0002 18.8998 10.062 19.1294 10.179 19.3318C10.296 19.5343 10.4642 19.7024 10.6667 19.8193L15.3333 22.486Z" stroke="#4B5563" stroke-width="1.33333" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 22.6667V16" stroke="#4B5563" stroke-width="1.33333" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.1934 12.666L16 15.9993L21.8067 12.666" stroke="#4B5563" stroke-width="1.33333" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 10.8457L19 14.279" stroke="#4B5563" stroke-width="1.33333" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <?php esc_html_e( 'Free returns within 30 days', 'fls-checkout-flow' ); ?>
+                    </span>
+                    <span>
+                         <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="0.5" y="0.5" width="31" height="31" rx="15.5" fill="white"/><rect x="0.5" y="0.5" width="31" height="31" rx="15.5" stroke="#E5E7EB"/><path d="M20.6673 11.334L11.334 20.6673" stroke="#4B5563" stroke-width="1.33333" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.3327 13.9993C13.2532 13.9993 13.9993 13.2532 13.9993 12.3327C13.9993 11.4122 13.2532 10.666 12.3327 10.666C11.4122 10.666 10.666 11.4122 10.666 12.3327C10.666 13.2532 11.4122 13.9993 12.3327 13.9993Z" stroke="#4B5563" stroke-width="1.33333" stroke-linecap="round" stroke-linejoin="round"/><path d="M19.6667 21.3333C20.5871 21.3333 21.3333 20.5871 21.3333 19.6667C21.3333 18.7462 20.5871 18 19.6667 18C18.7462 18 18 18.7462 18 19.6667C18 20.5871 18.7462 21.3333 19.6667 21.3333Z" stroke="#4B5563" stroke-width="1.33333" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <?php esc_html_e( 'Price match guarantee', 'fls-checkout-flow' ); ?>
+                    </span>
                 </div>
             </div>
         </div>

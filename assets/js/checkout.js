@@ -160,70 +160,172 @@
         return '';
     }
 
-    function getCouponFeedbackBox() {
-        return $('[data-fls-coupon-feedback]').first();
+    function getToastStack() {
+        let $stack = $('[data-fls-toast-stack]').first();
+
+        if (!$stack.length) {
+            $stack = $('<div class="fls-checkout-toast-stack" data-fls-toast-stack aria-live="polite" aria-atomic="true"></div>');
+            $('body').append($stack);
+        }
+
+        return $stack;
+    }
+
+    function positionToastStack() {
+        const $stack = getToastStack();
+
+        if (!$stack.length) {
+            return;
+        }
+
+        if (window.matchMedia('(max-width: 991px)').matches) {
+            $stack.css({
+                top: 'auto',
+                bottom: '12px',
+                left: '12px',
+                right: '12px',
+                width: 'auto',
+                maxWidth: 'none'
+            });
+
+            return;
+        }
+
+        const $orderDetailsCard = $('#fls-checkout-order-details .fls-order-details__card').first();
+
+        if (!$orderDetailsCard.length) {
+            $stack.css({
+                top: '20px',
+                bottom: 'auto',
+                left: 'auto',
+                right: '20px',
+                width: '360px',
+                maxWidth: 'calc(100vw - 24px)'
+            });
+
+            return;
+        }
+
+        const rect = $orderDetailsCard.get(0).getBoundingClientRect();
+        const viewportPadding = 16;
+        const gapBelowCard = 16;
+
+        let top = rect.bottom + gapBelowCard;
+        let left = rect.left;
+        let width = rect.width;
+
+        if (left < viewportPadding) {
+            left = viewportPadding;
+        }
+
+        const maxAllowedWidth = window.innerWidth - left - viewportPadding;
+
+        if (width > maxAllowedWidth) {
+            width = maxAllowedWidth;
+        }
+
+        $stack.css({
+            top: top + 'px',
+            bottom: 'auto',
+            left: left + 'px',
+            right: 'auto',
+            width: width + 'px',
+            maxWidth: 'none'
+        });
+    }
+
+    function getCouponNoticeIcon(type) {
+        if (type === 'success') {
+            return '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 18.3337C14.6024 18.3337 18.3333 14.6027 18.3333 10.0003C18.3333 5.39795 14.6024 1.66699 10 1.66699C5.39762 1.66699 1.66666 5.39795 1.66666 10.0003C1.66666 14.6027 5.39762 18.3337 10 18.3337Z" stroke="currentColor" stroke-width="1.5"/><path d="M6.25 10.0003L8.75 12.5003L13.75 7.50033" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+        }
+
+        if (type === 'notice') {
+            return '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 18.3337C14.6024 18.3337 18.3333 14.6027 18.3333 10.0003C18.3333 5.39795 14.6024 1.66699 10 1.66699C5.39762 1.66699 1.66666 5.39795 1.66666 10.0003C1.66666 14.6027 5.39762 18.3337 10 18.3337Z" stroke="currentColor" stroke-width="1.5"/><path d="M10 6.66699V10.8337" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M9.99539 13.333H10.0029" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+        }
+
+        return '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 18.3337C14.6024 18.3337 18.3333 14.6027 18.3333 10.0003C18.3333 5.39795 14.6024 1.66699 10 1.66699C5.39762 1.66699 1.66666 5.39795 1.66666 10.0003C1.66666 14.6027 5.39762 18.3337 10 18.3337Z" stroke="currentColor" stroke-width="1.5"/><path d="M10 6.66699V10.8337" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M9.99539 13.333H10.0029" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
     }
 
     function clearCouponFeedback() {
-        const $box = getCouponFeedbackBox();
+        $('[data-fls-toast]').remove();
+    }
 
-        if (!$box.length) {
+    function setCouponFeedback(type, message) {
+        if (!message) {
             return;
         }
 
-        $box.removeClass('is-error is-success').empty();
+        const normalizedType = type === 'success' ? 'success' : (type === 'notice' ? 'notice' : 'error');
+        const $stack = getToastStack();
+
+        positionToastStack();
+
+        const toastId = 'fls-toast-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+
+        const html = [
+            '<div class="fls-checkout-toast fls-checkout-toast--' + normalizedType + '" data-fls-toast="' + toastId + '">',
+            '<span class="fls-checkout-toast__icon" aria-hidden="true">' + getCouponNoticeIcon(normalizedType) + '</span>',
+            '<span class="fls-checkout-toast__text">' + $('<div />').text(message).html() + '</span>',
+            '</div>'
+        ].join('');
+
+        const $toast = $(html);
+        $stack.append($toast);
+
+        requestAnimationFrame(function () {
+            $toast.addClass('is-visible');
+        });
+
+        setTimeout(function () {
+            $toast.removeClass('is-visible');
+
+            setTimeout(function () {
+                $toast.remove();
+            }, 240);
+        }, 3500);
     }
 
-    function setCouponFeedback(type, message, allowHtml) {
-        const $box = getCouponFeedbackBox();
+    function parseCouponNoticeResponse(response, fallbackType, fallbackMessage) {
+        const $markup = $('<div />').html(response || '');
 
-        if (!$box.length) {
-            return;
-        }
-
-        $box.removeClass('is-error is-success');
-
-        if (type) {
-            $box.addClass('is-' + type);
-        }
-
-        if (allowHtml) {
-            $box.html(message || '');
-        } else {
-            $box.text(message || '');
-        }
-    }
-
-    function extractNoticeMessage(messages, fallback) {
-        if (!messages) {
-            return fallback || '';
-        }
-
-        const $markup = $('<div />').html(messages);
         const $errorItem = $markup.find('.woocommerce-error li').first();
-
         if ($errorItem.length) {
-            return $.trim($errorItem.text());
+            return { type: 'error', message: $.trim($errorItem.text()) || fallbackMessage || '' };
         }
 
         const $errorText = $markup.find('.woocommerce-error').first();
         if ($errorText.length) {
-            return $.trim($errorText.text());
+            return { type: 'error', message: $.trim($errorText.text()) || fallbackMessage || '' };
         }
 
         const $successItem = $markup.find('.woocommerce-message li').first();
         if ($successItem.length) {
-            return $.trim($successItem.text());
+            return { type: 'success', message: $.trim($successItem.text()) || fallbackMessage || '' };
         }
 
         const $successText = $markup.find('.woocommerce-message').first();
         if ($successText.length) {
-            return $.trim($successText.text());
+            return { type: 'success', message: $.trim($successText.text()) || fallbackMessage || '' };
         }
 
-        const plainText = $.trim($markup.text());
-        return plainText || fallback || '';
+        const $noticeItem = $markup.find('.woocommerce-info li').first();
+        if ($noticeItem.length) {
+            return { type: 'notice', message: $.trim($noticeItem.text()) || fallbackMessage || '' };
+        }
+
+        const $noticeText = $markup.find('.woocommerce-info').first();
+        if ($noticeText.length) {
+            return { type: 'notice', message: $.trim($noticeText.text()) || fallbackMessage || '' };
+        }
+
+        return {
+            type: fallbackType || 'success',
+            message: fallbackMessage || $.trim($markup.text()) || ''
+        };
     }
+
+
+
 
     function setButtonLoading($button, loading) {
         if (!$button.length) {
@@ -619,25 +721,27 @@
         $.ajax({
             type: 'POST',
             url: ajaxUrl,
+            dataType: 'html',
             data: {
                 security: nonce,
                 coupon_code: couponCode
             }
         }).done(function (response) {
-            const message = extractNoticeMessage(
-                response && response.messages ? response.messages : '',
-                'Discount Applied'
+            const notice = parseCouponNoticeResponse(
+                response,
+                'success',
+                getI18nMessage('discountApplied', 'Discount Applied')
             );
 
-            if (response && response.result === 'failure') {
-                setCouponFeedback('error', message, false);
+            setCouponFeedback(notice.type, notice.message);
+
+            if (notice.type === 'error') {
                 return;
             }
 
-            setCouponFeedback('success', message || 'Discount Applied', false);
             $(document.body).trigger('update_checkout');
         }).fail(function () {
-            setCouponFeedback('error', 'Something went wrong while applying the coupon.', false);
+            setCouponFeedback('error', getI18nMessage('couponApplyError', 'Something went wrong while applying the coupon.'));
         }).always(function () {
             setButtonLoading($button, false);
         });
@@ -657,20 +761,27 @@
         $.ajax({
             type: 'POST',
             url: ajaxUrl,
+            dataType: 'html',
             data: {
                 security: nonce,
                 coupon: couponCode
             }
         }).done(function (response) {
-            const message = extractNoticeMessage(
-                response && response.messages ? response.messages : '',
-                'Coupon removed.'
+            const notice = parseCouponNoticeResponse(
+                response,
+                'success',
+                getI18nMessage('couponRemoved', 'Coupon has been removed.')
             );
 
-            setCouponFeedback('success', message || 'Coupon removed.', false);
+            setCouponFeedback(notice.type, notice.message);
+
+            if (notice.type === 'error') {
+                return;
+            }
+
             $(document.body).trigger('update_checkout');
         }).fail(function () {
-            setCouponFeedback('error', 'Something went wrong while removing the coupon.', false);
+            setCouponFeedback('error', getI18nMessage('couponRemoveError', 'Something went wrong while removing the coupon.'));
         }).always(function () {
             setButtonLoading($button, false);
         });
@@ -686,15 +797,9 @@
                 const $form = $button.closest('[data-fls-coupon-form]');
                 const $input = $form.find('[name="coupon_code"]').first();
                 const couponCode = $.trim($input.val() || '');
-                const isDeleteMode = $form.attr('data-delete-mode') === '1';
-
-                if (isDeleteMode) {
-                    removeCoupon(couponCode, $button);
-                    return;
-                }
 
                 if (!couponCode) {
-                    setCouponFeedback('error', getI18nMessage('couponEmpty', 'Please enter a discount code.'), false);
+                    setCouponFeedback('error', getI18nMessage('couponEmpty', 'Please enter a discount code.'));
                     return;
                 }
 
@@ -771,6 +876,7 @@
                 const expanded = $button.attr('aria-expanded') === 'true';
 
                 $button.attr('aria-expanded', expanded ? 'false' : 'true');
+                $button.toggleClass('is-open', !expanded);
                 $body.stop(true, true).slideToggle(animationDuration);
             });
     }
@@ -1045,11 +1151,36 @@
         initDeliveryState();
         maybeDowngradeCompletedState();
         setStep(getActiveStep(), { immediate: !!immediate });
+        positionToastStack();
     }
 
     /* ---------------------------------------------
      * Boot
      * --------------------------------------------- */
+    $(window)
+        .off('resize.flsToastPosition scroll.flsToastPosition')
+        .on('resize.flsToastPosition scroll.flsToastPosition', function () {
+            positionToastStack();
+        });
+
+    $(document.body).on('updated_checkout', function () {
+        init(true);
+
+        setTimeout(function () {
+            positionToastStack();
+        }, 60);
+    });
+
+    $(window)
+        .off('resize.flsToastPosition scroll.flsToastPosition')
+        .on('resize.flsToastPosition scroll.flsToastPosition', function () {
+            positionToastStack();
+        });
+
+    $(function () {
+        init(true);
+    });
+
     $(document.body).on('updated_checkout', function () {
         init(true);
     });
