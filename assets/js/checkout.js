@@ -324,9 +324,6 @@
         };
     }
 
-
-
-
     function setButtonLoading($button, loading) {
         if (!$button.length) {
             return;
@@ -334,6 +331,28 @@
 
         $button.prop('disabled', !!loading);
         $button.toggleClass('is-loading', !!loading);
+    }
+
+    function syncPaymentMethodCards() {
+        const $paymentWrap = $('#fls-checkout-payment');
+
+        if (!$paymentWrap.length) {
+            return;
+        }
+
+        $paymentWrap.find('.wc_payment_method').removeClass('is-selected');
+
+        $paymentWrap.find('input[name="payment_method"]:checked').each(function () {
+            $(this).closest('.wc_payment_method').addClass('is-selected');
+        });
+    }
+
+    function bindPaymentMethodCards() {
+        $(document)
+            .off('change.flsPaymentMethod')
+            .on('change.flsPaymentMethod', '#fls-checkout-payment input[name="payment_method"]', function () {
+                syncPaymentMethodCards();
+            });
     }
 
     /* ---------------------------------------------
@@ -1152,6 +1171,8 @@
         maybeDowngradeCompletedState();
         setStep(getActiveStep(), { immediate: !!immediate });
         positionToastStack();
+        bindPaymentMethodCards();
+        syncPaymentMethodCards();
     }
 
     /* ---------------------------------------------
@@ -1169,20 +1190,6 @@
         setTimeout(function () {
             positionToastStack();
         }, 60);
-    });
-
-    $(window)
-        .off('resize.flsToastPosition scroll.flsToastPosition')
-        .on('resize.flsToastPosition scroll.flsToastPosition', function () {
-            positionToastStack();
-        });
-
-    $(function () {
-        init(true);
-    });
-
-    $(document.body).on('updated_checkout', function () {
-        init(true);
     });
 
     $(function () {
