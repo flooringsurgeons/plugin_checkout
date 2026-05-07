@@ -2,7 +2,7 @@
 /**
  * Plugin Name: FLS Checkout Flow
  * Description: Custom checkout for WooCommerce.
- * Version: 2.4.0
+ * Version: 2.5.0
  * Author: MeysamWeb
  * Text Domain: fls-checkout-flow
  * Requires Plugins: woocommerce

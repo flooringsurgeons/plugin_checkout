@@ -35,6 +35,20 @@ if ( ! $checkout->is_registration_enabled() && $checkout->is_registration_requir
             </div>
         </div>
 
+        <?php if ( ! is_user_logged_in() ) : ?>
+        <div class="fls-checkout-mobile-login">
+            <span class="fls-checkout-mobile-login__text"><?php esc_html_e( 'Log in to speed up checkout', 'fls-checkout-flow' ); ?></span>
+            <a class="fls-checkout-steps-nav__account" href="<?= esc_url( $flow->get_checkout_account_url() ); ?>">
+                <?= esc_html( __( 'Login/Register', 'fls-checkout-flow' ) ); ?>
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M8.33398 14.1666L12.5007 9.99998L8.33398 5.83331" stroke="#454545" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M12.5 10H2.5" stroke="#454545" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M12.5 2.5H15.8333C16.2754 2.5 16.6993 2.67559 17.0118 2.98816C17.3244 3.30072 17.5 3.72464 17.5 4.16667V15.8333C17.5 16.2754 17.3244 16.6993 17.0118 17.0118C16.6993 17.3244 16.2754 17.5 15.8333 17.5H12.5" stroke="#454545" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </a>
+        </div>
+        <?php endif; ?>
+
         <div class="fls-checkout-steps-nav" data-fls-steps-nav>
             <button type="button" class="fls-checkout-steps-nav__item is-active" data-fls-step-trigger="1">
                 <span class="fls-checkout-steps-nav__dot"></span>
@@ -77,10 +91,10 @@ if ( ! $checkout->is_registration_enabled() && $checkout->is_registration_requir
         </div>
 
         <?php if ( $checkout->get_checkout_fields() ) : ?>
+            <?php do_action( 'woocommerce_checkout_before_customer_details' ); ?>
+
             <div class="fls-checkout-layout">
                 <section class="fls-checkout-main">
-                    <?php do_action( 'woocommerce_checkout_before_customer_details' ); ?>
-
                     <section class="fls-checkout-step is-active" data-fls-step="1">
                         <button type="button" class="fls-checkout-step__header" data-fls-step-trigger="1">
                             <span class="fls-checkout-step__title-wrap">
@@ -106,8 +120,6 @@ if ( ! $checkout->is_registration_enabled() && $checkout->is_registration_requir
                             </div>
                         </div>
                     </section>
-
-                    <?php do_action( 'woocommerce_checkout_after_customer_details' ); ?>
 
                     <section class="fls-checkout-step" data-fls-step="2">
                         <button type="button" class="fls-checkout-step__header" data-fls-step-trigger="2">

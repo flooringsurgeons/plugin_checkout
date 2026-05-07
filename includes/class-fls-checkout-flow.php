@@ -29,6 +29,7 @@ class FLS_Checkout_Flow {
 
 		add_filter( 'template_include', array( $this, 'maybe_override_checkout_page_template' ), 99 );
 		add_filter( 'woocommerce_locate_template', array( $this, 'maybe_override_woocommerce_template' ), 99, 3 );
+		add_action( 'template_redirect', array( $this, 'maybe_clear_shipping_session' ) );
 
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 
@@ -45,14 +46,79 @@ class FLS_Checkout_Flow {
 
 		add_action( 'woocommerce_checkout_process', array( $this, 'validate_step_two_fields' ) );
 		add_action( 'woocommerce_checkout_create_order', array( $this, 'save_step_two_fields' ), 20, 2 );
+
+		add_filter( 'woocommerce_settings_tabs_array', array( $this, 'add_post_price_settings_tab' ), 50 );
+		add_action( 'woocommerce_settings_tabs_post_price', array( $this, 'render_post_price_settings_tab' ) );
+		add_action( 'admin_init', array( $this, 'handle_post_price_settings_save' ) );
+
+		add_action( 'wp_ajax_fls_calculate_shipping', array( $this, 'ajax_calculate_shipping' ) );
+		add_action( 'wp_ajax_nopriv_fls_calculate_shipping', array( $this, 'ajax_calculate_shipping' ) );
+		add_filter( 'woocommerce_package_rates', array( $this, 'inject_pickup_rate_if_missing' ), 98, 2 );
+		add_filter( 'woocommerce_package_rates', array( $this, 'override_shipping_rates_with_post_price' ), 99, 2 );
+
+		add_filter( 'woocommerce_order_button_html', array( $this, 'custom_payment_order_button_html' ) );
+		add_action( 'woocommerce_checkout_before_terms_and_conditions', array( $this, 'render_payment_email_opt_in' ) );
+		add_filter( 'woocommerce_get_privacy_policy_text', array( $this, 'custom_checkout_privacy_policy_text' ), 10, 2 );
+		add_filter( 'woocommerce_get_terms_and_conditions_checkbox_text', array( $this, 'custom_terms_checkbox_text' ) );
 	}
 
-	public function woocommerce_missing_notice() {
-		if ( ! current_user_can( 'activate_plugins' ) ) {
+	public function handle_post_price_settings_save() {
+		if ( ! isset( $_POST['fls_post_price_nonce'] ) ) {
 			return;
 		}
 
-		echo '<div class="notice notice-error"><p>' . esc_html__( 'FLS Checkout Flow requires WooCommerce to be active.', 'fls-checkout-flow' ) . '</p></div>';
+		if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['fls_post_price_nonce'] ) ), 'fls-post-price-settings' ) ) {
+			return;
+		}
+
+		if ( ! current_user_can( 'manage_woocommerce' ) ) {
+			return;
+		}
+
+		$regions = isset( $_POST['fls_post_price_regions'] )
+			? array_map( 'sanitize_text_field', wp_unslash( (array) $_POST['fls_post_price_regions'] ) )
+			: array();
+
+		$raw_prices      = isset( $_POST['fls_post_price_region_prices'] ) ? wp_unslash( (array) $_POST['fls_post_price_region_prices'] ) : array();
+		$sanitized_prices = array();
+
+		foreach ( $raw_prices as $key => $price ) {
+			$sanitized_prices[ sanitize_key( $key ) ] = abs( (float) $price );
+		}
+
+		$free_shipping_threshold = isset( $_POST['fls_free_shipping_threshold'] )
+			? abs( (float) $_POST['fls_free_shipping_threshold'] )
+			: 0;
+
+		$free_shipping_regions = isset( $_POST['fls_free_shipping_regions'] )
+			? array_map( 'sanitize_text_field', wp_unslash( (array) $_POST['fls_free_shipping_regions'] ) )
+			: array();
+
+		update_option(
+			'fls_post_price_settings',
+			array(
+				'enabled_regions'         => $regions,
+				'region_prices'           => $sanitized_prices,
+				'free_shipping_threshold' => $free_shipping_threshold,
+				'free_shipping_regions'   => $free_shipping_regions,
+			)
+		);
+	}
+
+	public function add_post_price_settings_tab( $tabs ) {
+		$tabs['post_price'] = __( 'Post Price', 'fls-checkout-flow' );
+		return $tabs;
+	}
+
+	public function render_post_price_settings_tab() {
+		$view = FLS_CHECKOUT_FLOW_PATH . 'includes/admin/views/html-post-price-settings.php';
+		if ( file_exists( $view ) ) {
+			include $view;
+		}
+	}
+
+	public function get_post_price_settings() {
+		return (array) get_option( 'fls_post_price_settings', array() );
 	}
 
 	public function maybe_override_checkout_page_template( $template ) {
@@ -101,7 +167,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/css/checkout.css',
 			array( 'fls-checkout-flow-flatpickr' ),
-			'2.7.0'
+			'2.8.23'
 		);
 
 		wp_enqueue_script(
@@ -116,7 +182,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/js/checkout.js',
 			array( 'jquery', 'wc-checkout', 'fls-checkout-flow-flatpickr' ),
-			'2.7.0',
+			'2.8.3',
 			true
 		);
 
@@ -128,6 +194,10 @@ class FLS_Checkout_Flow {
 				'coupon'     => array(
 					'applyNonce'  => wp_create_nonce( 'apply-coupon' ),
 					'removeNonce' => wp_create_nonce( 'remove-coupon' ),
+				),
+				'shipping'   => array(
+					'calcNonce' => wp_create_nonce( 'fls-calculate-shipping' ),
+					'ajaxUrl'   => admin_url( 'admin-ajax.php' ),
 				),
 				'i18n'       => array(
 					'stepOneError'      => __( 'Please complete the required customer details before continuing.', 'fls-checkout-flow' ),
@@ -452,6 +522,10 @@ class FLS_Checkout_Flow {
 			return $data;
 		}
 
+		// WC()->cart->get_total() already includes shipping because the
+		// override_shipping_rates_with_post_price filter replaces the rate
+		// at calculation time. With proper cache invalidation this is
+		// always in sync.
 		$total = (float) WC()->cart->get_total( 'edit' );
 		$vat   = $total > 0 ? ( $total / 120 ) * 20 : 0;
 
@@ -624,20 +698,30 @@ class FLS_Checkout_Flow {
 						$qty_label      = $this->get_order_item_qty_label( $cart_item, $product );
 						$thumbnail_html = $this->get_order_item_thumbnail_html( $product );
 						?>
-                        <div class="fls-order-details__item">
-                            <div class="fls-order-details__item-thumb"><?php echo wp_kses_post( $thumbnail_html ); ?></div>
+                        <div class="fls-order-details__item<?php echo $is_sample ? ' fls-order-details__item--sample' : ''; ?>">
+                            <div class="fls-order-details__item-thumb">
+								<?php echo wp_kses_post( $thumbnail_html ); ?>
+								<?php if ( $is_sample ) : ?>
+                                    <span class="fls-order-details__sample-badge"><?php esc_html_e( 'Sample', 'fls-checkout-flow' ); ?></span>
+								<?php endif; ?>
+							</div>
 
                             <div class="fls-order-details__item-main">
                                 <span class="fls-order-details__item-name"><?php echo esc_html( $product->get_name() ); ?></span>
 
 								<?php if ( $is_sample ) : ?>
-                                    <span class="fls-order-details__item-note"><?php esc_html_e( 'This is a sample product.', 'fls-checkout-flow' ); ?></span>
+                                    <span class="fls-order-details__item-meta"><?php esc_html_e( 'Free Sample', 'fls-checkout-flow' ); ?></span>
 								<?php elseif ( ! empty( $qty_label ) ) : ?>
                                     <span class="fls-order-details__item-meta"><?php echo esc_html( $qty_label ); ?></span>
 								<?php endif; ?>
                             </div>
 
-                            <span class="fls-order-details__item-price"><?php echo wp_kses_post( WC()->cart->get_product_subtotal( $product, $cart_item['quantity'] ) ); ?></span>
+                            <span class="fls-order-details__item-price"><?php
+								if ( $is_sample && isset( $cart_item['sample_price'] ) ) {
+									$product->set_price( (float) $cart_item['sample_price'] );
+								}
+								echo wp_kses_post( WC()->cart->get_product_subtotal( $product, $cart_item['quantity'] ) );
+							?></span>
                         </div>
 					<?php endforeach; ?>
                 </div>
@@ -650,10 +734,13 @@ class FLS_Checkout_Flow {
                         <span><?php echo wp_kses_post( WC()->cart->get_cart_subtotal() ); ?></span>
                     </div>
 
+                    <?php $shipping_html = $this->get_shipping_total_html(); ?>
+                    <?php if ( null !== $shipping_html ) : ?>
                     <div class="fls-order-details__row">
                         <span><?php esc_html_e( 'Shipping', 'woocommerce' ); ?></span>
-                        <span><?php echo wp_kses_post( $this->get_shipping_total_html() ); ?></span>
+                        <span><?php echo wp_kses_post( $shipping_html ); ?></span>
                     </div>
+                    <?php endif; ?>
 
 					<?php foreach ( $discount_rows as $discount_row ) : ?>
                         <div class="fls-order-details__row fls-order-details__row--discount-line">
@@ -788,9 +875,17 @@ class FLS_Checkout_Flow {
 		$pickup_rates   = $grouped_rates['pickup'];
 		$stored_date    = $this->get_posted_checkout_value( 'fls_delivery_date' );
 		$stored_mode    = $this->get_posted_checkout_value( 'fls_delivery_mode' );
-		$active_mode    = 'pickup' === $stored_mode && ! empty( $pickup_rates ) ? 'pickup' : 'delivery';
 
-		if ( empty( $delivery_rates ) && ! empty( $pickup_rates ) ) {
+		// Detect whether we have already calculated and delivery is unavailable.
+		$has_calculated     = WC()->session && ! empty( WC()->session->get( 'fls_calculated_shipping_postcode' ) );
+		$delivery_available = WC()->session ? WC()->session->get( 'fls_delivery_available' ) : null;
+		$delivery_blocked   = $has_calculated && ! $delivery_available;
+
+		$active_mode = 'pickup' === $stored_mode && ! empty( $pickup_rates ) ? 'pickup' : 'delivery';
+
+		// When delivery is blocked and no delivery rates exist, still keep
+		// the Delivery tab visible (so we can show the warning).
+		if ( empty( $delivery_rates ) && ! $delivery_blocked && ! empty( $pickup_rates ) ) {
 			$active_mode = 'pickup';
 		}
 
@@ -802,9 +897,9 @@ class FLS_Checkout_Flow {
             <input type="hidden" name="fls_delivery_date" value="<?php echo esc_attr( $stored_date ); ?>" data-fls-delivery-date-input />
 
             <div class="fls-delivery-method__tabs" role="tablist" aria-label="<?php esc_attr_e( 'Delivery type', 'fls-checkout-flow' ); ?>">
-				<?php if ( ! empty( $delivery_rates ) ) : ?>
+				<?php if ( ! empty( $delivery_rates ) || $delivery_blocked ) : ?>
                     <button type="button" class="fls-delivery-method__tab<?php echo 'delivery' === $active_mode ? ' is-active' : ''; ?>" data-fls-delivery-tab="delivery" role="tab" aria-selected="<?php echo 'delivery' === $active_mode ? 'true' : 'false'; ?>">
-                        <span aria-hidden="true">🛵</span>
+                        <span aria-hidden="true">🚚</span>
                         <span><?php esc_html_e( 'Delivery', 'fls-checkout-flow' ); ?></span>
                     </button>
 				<?php endif; ?>
@@ -817,8 +912,9 @@ class FLS_Checkout_Flow {
 				<?php endif; ?>
             </div>
 
-			<?php if ( ! empty( $delivery_rates ) ) : ?>
+			<?php if ( ! empty( $delivery_rates ) || $delivery_blocked ) : ?>
                 <div class="fls-delivery-method__panel<?php echo 'delivery' === $active_mode ? ' is-active' : ''; ?>" data-fls-delivery-panel="delivery">
+					<?php if ( ! empty( $delivery_rates ) ) : ?>
                     <div class="fls-delivery-method__options">
 						<?php foreach ( $delivery_rates as $delivery_rate ) : ?>
 							<?php $this->render_shipping_rate_card( $delivery_rate, 'delivery' ); ?>
@@ -830,6 +926,19 @@ class FLS_Checkout_Flow {
                         <input id="fls-delivery-date-display" type="text" class="fls-delivery-method__date-input" data-fls-date-display="delivery" placeholder="<?php echo esc_attr__( 'Select Your Date', 'fls-checkout-flow' ); ?>" autocomplete="off" readonly />
                         <span class="fls-delivery-method__date-icon" aria-hidden="true">🗓</span>
                     </div>
+					<?php endif; ?>
+
+					<?php if ( $delivery_blocked ) : ?>
+                    <div class="fls-delivery-method__warning" data-fls-delivery-warning>
+                        <span class="fls-delivery-method__warning-icon" aria-hidden="true">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 18.3337C14.6024 18.3337 18.3333 14.6027 18.3333 10.0003C18.3333 5.39795 14.6024 1.66699 10 1.66699C5.39762 1.66699 1.66666 5.39795 1.66666 10.0003C1.66666 14.6027 5.39762 18.3337 10 18.3337Z" stroke="currentColor" stroke-width="1.5"/><path d="M10 6.66699V10.8337" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M9.99539 13.333H10.0029" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                        </span>
+                        <span class="fls-delivery-method__warning-text">
+                            <strong><?php esc_html_e( 'Delivery is not available in your area yet.', 'fls-checkout-flow' ); ?></strong>
+                            <span><?php esc_html_e( 'Enter another postcode or select in-store pickup to continue.', 'fls-checkout-flow' ); ?></span>
+                        </span>
+                    </div>
+					<?php endif; ?>
                 </div>
 			<?php endif; ?>
 
@@ -1085,28 +1194,625 @@ class FLS_Checkout_Flow {
 		return ob_get_clean();
 	}
 
+	/**
+	 * Replace WooCommerce's default "Place order" button with Back + Complete Order buttons.
+	 */
+	public function custom_payment_order_button_html( $button_html ) {
+		if ( ! $this->should_modify_payment_output() ) {
+			return $button_html;
+		}
+
+		ob_start();
+		?>
+		<div class="fls-checkout-step__actions fls-checkout-step__actions--split">
+			<button type="button" class="fls-checkout-step__button fls-checkout-step__button--secondary" data-fls-step-prev="2">
+				<?php esc_html_e( 'Back', 'fls-checkout-flow' ); ?>
+			</button>
+			<button type="submit" class="fls-checkout-step__button" name="woocommerce_checkout_place_order" id="place_order" value="<?php esc_attr_e( 'Complete Order', 'fls-checkout-flow' ); ?>" data-value="<?php esc_attr_e( 'Complete Order', 'fls-checkout-flow' ); ?>">
+				<?php esc_html_e( 'Complete Order', 'fls-checkout-flow' ); ?>
+			</button>
+		</div>
+		<?php
+
+		return ob_get_clean();
+	}
+
+	/**
+	 * Output the "Email me exclusive offers" opt-in checkbox before the terms and conditions.
+	 */
+	public function render_payment_email_opt_in() {
+		if ( ! $this->should_modify_payment_output() ) {
+			return;
+		}
+		?>
+		<div class="fls-checkout-payment__email-optin">
+			<label class="fls-checkout-payment__email-optin-label">
+				<input type="checkbox" name="fls_email_optin" value="1" class="fls-checkout-payment__email-optin-checkbox" />
+				<span><?php esc_html_e( 'Email me exclusive offers and updates (optional)', 'fls-checkout-flow' ); ?></span>
+			</label>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Shorten the WooCommerce privacy policy text on checkout to match the design.
+	 */
+	public function custom_checkout_privacy_policy_text( $text, $type ) {
+		if ( ! $this->should_modify_payment_output() ) {
+			return $text;
+		}
+
+		if ( 'checkout' !== $type ) {
+			return $text;
+		}
+
+		$privacy_page_id = wc_privacy_policy_page_id();
+		$privacy_link    = $privacy_page_id
+			? '<a href="' . esc_url( get_permalink( $privacy_page_id ) ) . '" class="woocommerce-privacy-policy-link" target="_blank">' . __( 'Privacy Policy', 'fls-checkout-flow' ) . '</a>'
+			: __( 'Privacy Policy', 'fls-checkout-flow' );
+
+		/* translators: %s privacy policy link */
+		return sprintf( __( 'Your personal data will be used to process your order in accordance with our %s.', 'fls-checkout-flow' ), $privacy_link );
+	}
+
+	/**
+	 * Change the terms and conditions checkbox text to match the design.
+	 */
+	public function custom_terms_checkbox_text( $text ) {
+		if ( ! $this->should_modify_payment_output() ) {
+			return $text;
+		}
+
+		$terms_page_id = wc_terms_and_conditions_page_id();
+		$terms_link    = $terms_page_id
+			? '<a href="' . esc_url( get_permalink( $terms_page_id ) ) . '" class="woocommerce-terms-and-conditions-link" target="_blank">' . __( 'Terms &amp; Conditions', 'fls-checkout-flow' ) . '</a>'
+			: __( 'Terms &amp; Conditions', 'fls-checkout-flow' );
+
+		/* translators: %s terms and conditions link */
+		return sprintf( __( 'I agree to the %s', 'fls-checkout-flow' ), $terms_link );
+	}
+
+	public function maybe_clear_shipping_session() {
+		if ( ! $this->should_override_checkout() ) {
+			return;
+		}
+
+		if ( ! WC()->session ) {
+			return;
+		}
+
+		WC()->session->set( 'fls_calculated_shipping_postcode', '' );
+		WC()->session->set( 'fls_calculated_shipping_amount', null );
+		WC()->session->set( 'fls_delivery_available', null );
+		WC()->session->set( 'fls_free_shipping', null );
+
+		// Invalidate WC shipping rate transient cache so WC recalculates
+		// rates from scratch on this fresh page load.
+		WC_Cache_Helper::get_transient_version( 'shipping', true );
+	}
+
 	private function get_shipping_total_html() {
 		if ( ! WC()->cart->needs_shipping() ) {
 			return esc_html__( 'Free', 'woocommerce' );
 		}
 
-		$shipping_total = (float) WC()->cart->get_shipping_total() + (float) WC()->cart->get_shipping_tax();
+		if ( ! WC()->session ) {
+			return null;
+		}
 
-		if ( WC()->cart->has_calculated_shipping() && $shipping_total <= 0 ) {
+		$postcode = WC()->session->get( 'fls_calculated_shipping_postcode' );
+
+		// Before the user has entered a postcode, hide the shipping row entirely.
+		if ( empty( $postcode ) ) {
+			return null;
+		}
+
+		// Use the WC chosen shipping method to derive the shipping total for
+		// the Order Details sidebar.  This respects both our injected rates
+		// (free / standard / pickup) and any user selection change in step 2.
+		$chosen_methods = (array) WC()->session->get( 'chosen_shipping_methods', array() );
+		$packages       = WC()->shipping()->get_packages();
+
+		// Determine whether the user has explicitly posted a delivery mode
+		// (sent by the checkout form during update_order_review requests).
+		$posted_mode = isset( $_POST['fls_delivery_mode'] )
+			? sanitize_text_field( wp_unslash( $_POST['fls_delivery_mode'] ) )
+			: '';
+
+		foreach ( $packages as $pkg_index => $package ) {
+			$chosen_id = isset( $chosen_methods[ $pkg_index ] ) ? $chosen_methods[ $pkg_index ] : '';
+
+			if ( ! empty( $chosen_id ) && ! empty( $package['rates'][ $chosen_id ] ) ) {
+				$rate = $package['rates'][ $chosen_id ];
+
+				if ( 'local_pickup' === $rate->get_method_id() ) {
+					// If user explicitly chose pickup mode, hide the shipping row.
+					if ( 'pickup' === $posted_mode ) {
+						return null;
+					}
+					// Delivery mode but pickup is still the WC-chosen method
+					// (transitional state just after postcode calculation).
+					// Break out and use the session-based delivery price fallback.
+					break;
+				}
+
+				$cost  = (float) $rate->get_cost();
+				$taxes = array_sum( (array) $rate->get_taxes() );
+				$total = $cost + (float) $taxes;
+
+				return $total <= 0
+					? esc_html__( 'Free', 'woocommerce' )
+					: wc_price( $total );
+			}
+		}
+
+		// Fallback: read from our session values.
+		// If the user is explicitly in pickup mode, hide the shipping row.
+		if ( 'pickup' === $posted_mode ) {
+			return null;
+		}
+
+		$delivery_available = WC()->session->get( 'fls_delivery_available' );
+		$calculated_amount  = WC()->session->get( 'fls_calculated_shipping_amount' );
+
+		// Region not configured (and no calculated amount either) — show nothing.
+		if ( ! $delivery_available && null === $calculated_amount ) {
+			return null;
+		}
+
+		// Free shipping (threshold met or only samples).
+		if ( WC()->session->get( 'fls_free_shipping' ) ) {
 			return esc_html__( 'Free', 'woocommerce' );
 		}
 
-		if ( $shipping_total <= 0 ) {
-			return esc_html__( 'Calculated at next step', 'fls-checkout-flow' );
+		if ( null !== $calculated_amount ) {
+			$amount = (float) $calculated_amount;
+			return $amount <= 0 ? esc_html__( 'Free', 'woocommerce' ) : wc_price( $amount );
 		}
 
-		return wc_price( $shipping_total );
+		// Last resort: use WC's own cart shipping total, which is already
+		// correct after override_shipping_rates_with_post_price has run.
+		$wc_shipping = (float) WC()->cart->get_shipping_total() + (float) WC()->cart->get_shipping_tax();
+
+		if ( $wc_shipping > 0 ) {
+			return wc_price( $wc_shipping );
+		}
+
+		// WC computed £0 — if any delivery method is chosen it means free shipping.
+		$wc_chosen = (array) WC()->session->get( 'chosen_shipping_methods', array() );
+		foreach ( $wc_chosen as $method_id ) {
+			if ( false === strpos( (string) $method_id, 'local_pickup' ) ) {
+				return esc_html__( 'Free', 'woocommerce' );
+			}
+		}
+
+		return null;
 	}
 
 	private function get_total_tax_amount() {
 		$totals = WC()->cart->get_totals();
 
 		return isset( $totals['total_tax'] ) ? (float) $totals['total_tax'] : 0;
+	}
+
+	/* -------------------------------------------------------
+	 * Post-price shipping: calculation helpers
+	 * ------------------------------------------------------- */
+
+	/**
+	 * Call the postcodes.io API to look up the country/region for a UK postcode.
+	 *
+	 * Returns one of our four internal region keys:
+	 *   'england' | 'scotland' | 'wales' | 'northern_ireland'
+	 *
+	 * Returns null on any HTTP / parsing error so callers can fall back gracefully.
+	 *
+	 * @param string $postcode Raw postcode entered by the customer.
+	 * @return string|null
+	 */
+	private function fetch_postcode_region_from_api( $postcode ) {
+		$postcode = rawurlencode( strtoupper( preg_replace( '/\s+/', '', (string) $postcode ) ) );
+
+		if ( empty( $postcode ) ) {
+			return null;
+		}
+
+		$url      = 'https://api.postcodes.io/postcodes/' . $postcode;
+		$response = wp_remote_get(
+			$url,
+			array(
+				'timeout'    => 5,
+				'user-agent' => 'FLS-Checkout/' . ( defined( 'FLS_CHECKOUT_FLOW_VERSION' ) ? FLS_CHECKOUT_FLOW_VERSION : '1.0' ),
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return null;
+		}
+
+		$http_code = wp_remote_retrieve_response_code( $response );
+
+		if ( 200 !== (int) $http_code ) {
+			return null;
+		}
+
+		$body = wp_remote_retrieve_body( $response );
+		$data = json_decode( $body, true );
+
+		if ( empty( $data['result']['country'] ) ) {
+			return null;
+		}
+
+		// Map postcodes.io country string to our internal region key.
+		$country_map = array(
+			'England'          => 'england',
+			'Scotland'         => 'scotland',
+			'Wales'            => 'wales',
+			'Northern Ireland' => 'northern_ireland',
+		);
+
+		$country = (string) $data['result']['country'];
+
+		return isset( $country_map[ $country ] ) ? $country_map[ $country ] : null;
+	}
+
+	/**
+	 * Resolve a UK postcode to one of our four internal region keys.
+	 *
+	 * Tries the postcodes.io API first; falls back to a local prefix-based
+	 * lookup if the API is unavailable or returns an unexpected value.
+	 *
+	 * @param string $postcode
+	 * @return string  One of: 'england' | 'scotland' | 'wales' | 'northern_ireland'
+	 */
+	private function get_uk_region_for_postcode( $postcode ) {
+		// Primary: live API lookup.
+		$api_region = $this->fetch_postcode_region_from_api( $postcode );
+
+		if ( null !== $api_region ) {
+			return $api_region;
+		}
+
+		// Fallback: prefix-based heuristic when the API is unreachable.
+		$clean = strtoupper( preg_replace( '/\s+/', '', (string) $postcode ) );
+		$area  = preg_replace( '/[^A-Z].*/', '', $clean );
+
+		$northern_ireland = array( 'BT' );
+		$scotland         = array( 'AB', 'DD', 'DG', 'EH', 'FK', 'G', 'HS', 'IV', 'KA', 'KW', 'KY', 'ML', 'PA', 'PH', 'TD', 'ZE' );
+		$wales            = array( 'CF', 'CH', 'LD', 'LL', 'NP', 'SA', 'SY' );
+
+		if ( in_array( $area, $northern_ireland, true ) ) {
+			return 'northern_ireland';
+		}
+
+		if ( in_array( $area, $scotland, true ) ) {
+			return 'scotland';
+		}
+
+		if ( in_array( $area, $wales, true ) ) {
+			return 'wales';
+		}
+
+		return 'england';
+	}
+
+	/**
+	 * Calculate the post-price shipping cost for the current cart given a postcode.
+	 *
+	 * Returns the calculated amount (float) or null when the region is not
+	 * enabled in the post-price settings (fall back to WooCommerce default).
+	 *
+	 * Uses the HIGHEST shipping-class price (not the sum) as the base cost.
+	 * Sample products are excluded — they always ship free.
+	 *
+	 * @param string $postcode
+	 * @return float|null
+	 */
+	private function calculate_post_price_shipping_cost( $postcode ) {
+		if ( ! WC()->cart ) {
+			return null;
+		}
+
+		$region   = $this->get_uk_region_for_postcode( $postcode );
+		$settings = $this->get_post_price_settings();
+
+		$enabled_regions = isset( $settings['enabled_regions'] ) ? (array) $settings['enabled_regions'] : array();
+
+		if ( empty( $enabled_regions ) || ! in_array( $region, $enabled_regions, true ) ) {
+			return null;
+		}
+
+		$region_prices  = isset( $settings['region_prices'] ) ? (array) $settings['region_prices'] : array();
+		$max_shipping   = 0.0;
+		$has_shippable  = false;
+
+		foreach ( WC()->cart->get_cart() as $cart_item ) {
+			$product  = isset( $cart_item['data'] ) ? $cart_item['data'] : false;
+			$quantity = isset( $cart_item['quantity'] ) ? (int) $cart_item['quantity'] : 0;
+
+			if ( ! $product || ! $product->exists() || $quantity <= 0 ) {
+				continue;
+			}
+
+			// Skip sample products — they always ship free.
+			if ( ! empty( $cart_item['sample_product'] ) ) {
+				continue;
+			}
+
+			// This is a real shippable product regardless of whether a
+			// shipping class is configured for it.
+			$has_shippable = true;
+
+			$shipping_class_id = $product->get_shipping_class_id();
+
+			if ( ! $shipping_class_id ) {
+				continue;
+			}
+
+			$price_key = $region . '_' . $shipping_class_id;
+
+			if ( isset( $region_prices[ $price_key ] ) ) {
+				$class_price = (float) $region_prices[ $price_key ];
+				if ( $class_price > $max_shipping ) {
+					$max_shipping = $class_price;
+				}
+			}
+		}
+
+		// Cart only contains samples (no shippable products) — shipping is free.
+		if ( ! $has_shippable ) {
+			return 0.0;
+		}
+
+		return $max_shipping;
+	}
+
+	/**
+	 * Check whether the current cart qualifies for free shipping based on the
+	 * Free Shipping Threshold configured in admin.
+	 *
+	 * @return bool
+	 */
+	private function cart_qualifies_for_free_shipping() {
+		$settings       = $this->get_post_price_settings();
+		$free_threshold = isset( $settings['free_shipping_threshold'] ) ? (float) $settings['free_shipping_threshold'] : 0;
+
+		if ( $free_threshold <= 0 || ! WC()->cart ) {
+			return false;
+		}
+
+		// Check if the current region is eligible for free shipping.
+		$free_regions = isset( $settings['free_shipping_regions'] ) ? (array) $settings['free_shipping_regions'] : array();
+
+		if ( empty( $free_regions ) ) {
+			return false;
+		}
+
+		$postcode = WC()->session ? WC()->session->get( 'fls_calculated_shipping_postcode' ) : '';
+
+		if ( empty( $postcode ) ) {
+			return false;
+		}
+
+		$region = $this->get_uk_region_for_postcode( $postcode );
+
+		if ( ! in_array( $region, $free_regions, true ) ) {
+			return false;
+		}
+
+		// Only count non-sample items toward the free-shipping threshold.
+		// Sample products should never contribute to unlocking free shipping.
+		$cart_subtotal = 0.0;
+		foreach ( WC()->cart->get_cart() as $cart_item ) {
+			if ( ! empty( $cart_item['sample_product'] ) ) {
+				continue;
+			}
+			$product  = isset( $cart_item['data'] ) ? $cart_item['data'] : false;
+			$quantity = isset( $cart_item['quantity'] ) ? (int) $cart_item['quantity'] : 0;
+			if ( ! $product || ! $product->exists() || $quantity <= 0 ) {
+				continue;
+			}
+			$cart_subtotal += (float) $product->get_price() * $quantity;
+		}
+
+		return $cart_subtotal >= $free_threshold;
+	}
+
+	/**
+	 * AJAX: calculate shipping for a postcode and store it in the WC session.
+	 *
+	 * Returns delivery_available (whether the region is configured), is_free
+	 * (whether the cart qualifies for free shipping), and the base amount.
+	 */
+	public function ajax_calculate_shipping() {
+		check_ajax_referer( 'fls-calculate-shipping', 'nonce' );
+
+		$postcode = isset( $_POST['postcode'] ) ? sanitize_text_field( wp_unslash( $_POST['postcode'] ) ) : '';
+
+		if ( empty( $postcode ) ) {
+			wp_send_json_error( array( 'message' => __( 'Postcode is required.', 'fls-checkout-flow' ) ) );
+			return;
+		}
+
+		if ( ! WC()->session || ! WC()->customer ) {
+			wp_send_json_error( array( 'message' => __( 'Session not available.', 'fls-checkout-flow' ) ) );
+			return;
+		}
+
+		// Store postcode in WC customer so standard WC shipping zones also update.
+		WC()->customer->set_billing_postcode( $postcode );
+		WC()->customer->set_shipping_postcode( $postcode );
+		WC()->customer->save();
+
+		$calculated_amount  = $this->calculate_post_price_shipping_cost( $postcode );
+		$delivery_available = null !== $calculated_amount;
+		$is_free            = $delivery_available && ( $calculated_amount <= 0 || $this->cart_qualifies_for_free_shipping() );
+
+		WC()->session->set( 'fls_calculated_shipping_postcode', $postcode );
+		WC()->session->set( 'fls_calculated_shipping_amount', $calculated_amount );
+		WC()->session->set( 'fls_delivery_available', $delivery_available );
+		WC()->session->set( 'fls_free_shipping', $is_free );
+
+		// Invalidate WC shipping rate transient cache so the next
+		// update_checkout recalculates rates with our override filter.
+		WC_Cache_Helper::get_transient_version( 'shipping', true );
+
+		wp_send_json_success(
+			array(
+				'postcode'           => $postcode,
+				'amount'             => $calculated_amount,
+				'delivery_available' => $delivery_available,
+				'is_free'            => $is_free,
+			)
+		);
+	}
+
+	/**
+	 * Inject the post-price custom shipping rate when one has been calculated.
+	 *
+	 * @param WC_Shipping_Rate[] $rates
+	 * @param array              $package
+	 * @return WC_Shipping_Rate[]
+	 */
+	/**
+	 * Always inject a free local pickup rate so the Pickup tab is visible
+	 * regardless of whether a local_pickup shipping method exists in any zone.
+	 */
+	public function inject_pickup_rate_if_missing( $rates, $package ) {
+		foreach ( $rates as $rate ) {
+			if ( 'local_pickup' === $rate->get_method_id() ) {
+				return $rates; // A real local_pickup already exists — nothing to do.
+			}
+		}
+
+		$store_name  = get_bloginfo( 'name' );
+		$store_parts = array_filter(
+			array(
+				get_option( 'woocommerce_store_address' ),
+				get_option( 'woocommerce_store_city' ),
+				get_option( 'woocommerce_store_postcode' ),
+			)
+		);
+		$address = implode( ', ', $store_parts );
+
+		// Build label in "Title | Description" format so the card splits it correctly.
+		$label = ! empty( $address ) ? $store_name . ' | ' . $address : $store_name;
+
+		$pickup_rate = new WC_Shipping_Rate(
+			'fls_local_pickup',
+			apply_filters( 'fls_checkout_pickup_rate_label', $label ),
+			0,
+			array(),
+			'local_pickup'
+		);
+
+		$rates['fls_local_pickup'] = $pickup_rate;
+
+		return $rates;
+	}
+
+	public function override_shipping_rates_with_post_price( $rates, $package ) {
+		if ( ! WC()->session ) {
+			return $rates;
+		}
+
+		$postcode = WC()->session->get( 'fls_calculated_shipping_postcode' );
+
+		// Only override once a postcode calculation has been performed.
+		if ( empty( $postcode ) ) {
+			return $rates;
+		}
+
+		$delivery_available = WC()->session->get( 'fls_delivery_available' );
+		$amount             = WC()->session->get( 'fls_calculated_shipping_amount' );
+
+		// Preserve local pickup rates so the Pickup tab remains visible.
+		$pickup_rates = array();
+		foreach ( $rates as $rate_id => $rate ) {
+			if ( 'local_pickup' === $rate->get_method_id() ) {
+				$pickup_rates[ $rate_id ] = $rate;
+			}
+		}
+
+		// If delivery is not available for this region, remove all delivery
+		// rates and keep only pickup.
+		if ( ! $delivery_available || null === $amount ) {
+			return $pickup_rates;
+		}
+
+		// Build an outward-code label from the postcode (e.g. "EC1").
+		$clean_postcode = strtoupper( preg_replace( '/\s+/', '', (string) $postcode ) );
+		$outward_code   = preg_replace( '/\d[A-Z]{2}$/', '', $clean_postcode );
+
+		$is_free   = (bool) WC()->session->get( 'fls_free_shipping' );
+		$new_rates = array();
+
+		if ( $is_free ) {
+			// Free shipping rate — pre-selected.
+			$free_label = __( 'Free Shipping', 'fls-checkout-flow' );
+			$free_rate  = new WC_Shipping_Rate(
+				'fls_free_shipping',
+				$free_label,
+				0,
+				array(),
+				'free_shipping'
+			);
+			$new_rates['fls_free_shipping'] = $free_rate;
+
+			// Also show the standard paid rate as an alternative.
+			if ( (float) $amount > 0 ) {
+				$std_label    = __( 'Standard Shipping', 'fls-checkout-flow' );
+				$standard_rate = new WC_Shipping_Rate(
+					'fls_post_price_shipping',
+					$std_label,
+					(float) $amount,
+					array(),
+					'flat_rate'
+				);
+				$new_rates['fls_post_price_shipping'] = $standard_rate;
+			}
+		} else {
+			// Standard shipping with region description.
+			$std_label    = __( 'Standard Shipping', 'fls-checkout-flow' );
+			if ( ! empty( $outward_code ) ) {
+				$std_label .= ' | ' . $outward_code;
+			}
+			$standard_rate = new WC_Shipping_Rate(
+				'fls_post_price_shipping',
+				$std_label,
+				(float) $amount,
+				array(),
+				'flat_rate'
+			);
+			$new_rates['fls_post_price_shipping'] = $standard_rate;
+		}
+
+		return array_merge( $new_rates, $pickup_rates );
+	}
+
+	private function should_modify_payment_output() {
+		if ( is_admin() ) {
+			return false;
+		}
+
+		if ( wp_doing_ajax() ) {
+			$wc_ajax = isset( $_REQUEST['wc-ajax'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['wc-ajax'] ) ) : '';
+			return in_array( $wc_ajax, array( 'update_order_review', 'checkout' ), true );
+		}
+
+		if ( ! function_exists( 'is_checkout' ) || ! is_checkout() ) {
+			return false;
+		}
+
+		if ( function_exists( 'is_order_received_page' ) && is_order_received_page() ) {
+			return false;
+		}
+
+		if ( function_exists( 'is_wc_endpoint_url' ) && ( is_wc_endpoint_url( 'order-pay' ) || is_wc_endpoint_url( 'order-received' ) ) ) {
+			return false;
+		}
+
+		return true;
 	}
 
 	private function should_override_checkout() {

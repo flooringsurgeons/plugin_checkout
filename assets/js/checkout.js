@@ -26,6 +26,9 @@
         return {
             activeStep: getInitialStep(),
             deliveryMode: 'delivery',
+            calculatingShipping: false,
+            deliveryAvailable: null,
+            shippingIsFree: false,
             dates: {
                 delivery: '',
                 pickup: ''
@@ -437,6 +440,111 @@
     }
 
     /* ---------------------------------------------
+     * Post-price shipping calculation
+     * --------------------------------------------- */
+    function getShippingCalcNonce() {
+        return window.flsCheckoutFlow && window.flsCheckoutFlow.shipping && window.flsCheckoutFlow.shipping.calcNonce
+            ? window.flsCheckoutFlow.shipping.calcNonce
+            : '';
+    }
+
+    function getShippingCalcAjaxUrl() {
+        if (window.flsCheckoutFlow && window.flsCheckoutFlow.shipping && window.flsCheckoutFlow.shipping.ajaxUrl) {
+            return window.flsCheckoutFlow.shipping.ajaxUrl;
+        }
+
+        return typeof wc_checkout_params !== 'undefined' ? wc_checkout_params.ajax_url : '';
+    }
+
+    /**
+     * Send the postcode to the server to calculate & store shipping.
+     * Shows a loading indicator on the postcode field, waits for our
+     * fls_calculate_shipping AJAX to store the amount in-session, then
+     * triggers a WC fragment refresh and waits for updated_checkout before
+     * navigating. This ensures step 2 shows the correct post-price rate with
+     * no flicker. Always calls onDone so checkout is never permanently blocked.
+     */
+    function calculateShippingForStep1(postcode, onDone) {
+        const nonce   = getShippingCalcNonce();
+        const ajaxUrl = getShippingCalcAjaxUrl();
+        const state   = getState();
+
+        // Determine the active postcode field
+        const useDifferent = $('#ship-to-different-address-checkbox').is(':checked');
+        const $postcodeField = useDifferent
+            ? $('#shipping_postcode_field')
+            : $('#billing_postcode_field');
+        const $continueBtn = $('[data-fls-step-next="2"]');
+
+        function startLoading() {
+            state.calculatingShipping = true;
+            $postcodeField.addClass('fls-field--calculating');
+            setButtonLoading($continueBtn, true);
+        }
+
+        function stopLoading() {
+            state.calculatingShipping = false;
+            $postcodeField.removeClass('fls-field--calculating');
+            setButtonLoading($continueBtn, false);
+        }
+
+        function finish() {
+            stopLoading();
+            if (typeof onDone === 'function') {
+                onDone();
+            }
+        }
+
+        if (!postcode || !nonce || !ajaxUrl) {
+            finish();
+            return;
+        }
+
+        startLoading();
+
+        $.ajax({
+            type: 'POST',
+            url: ajaxUrl,
+            data: {
+                action: 'fls_calculate_shipping',
+                nonce: nonce,
+                postcode: postcode
+            }
+        }).done(function (response) {
+            // Store delivery availability in state so the UI can react.
+            if (response && response.data) {
+                state.deliveryAvailable = !!response.data.delivery_available;
+                state.shippingIsFree   = !!response.data.is_free;
+            }
+
+            // If delivery is available, switch the hidden form field to
+            // 'delivery' NOW — before update_checkout serialises the form.
+            // This ensures the server-side fragment builder knows the user
+            // is in delivery mode and can show the correct shipping cost.
+            if (state.deliveryAvailable) {
+                setActiveDeliveryMode('delivery');
+            }
+
+            // Trigger WC to recalculate shipping fragments (now with the stored
+            // post-price amount), then navigate once the update is confirmed.
+            // Safety timeout = 8 s so checkout is never permanently blocked.
+            var wcTimeout = setTimeout(function () {
+                $(document.body).off('updated_checkout.flsShippingCalc');
+                finish();
+            }, 8000);
+
+            $(document.body).one('updated_checkout.flsShippingCalc', function () {
+                clearTimeout(wcTimeout);
+                finish();
+            });
+
+            $(document.body).trigger('update_checkout');
+        }).fail(function () {
+            finish();
+        });
+    }
+
+    /* ---------------------------------------------
      * Step validation
      * --------------------------------------------- */
     function validateRequiredFields(step, focusInvalid) {
@@ -675,6 +783,21 @@
 
             state.steps[1].completed = true;
             state.steps[2].available = true;
+
+            // Determine the delivery postcode from the form.
+            const useDifferent = $('#ship-to-different-address-checkbox').is(':checked');
+            const postcode = useDifferent
+                ? $.trim($('#shipping_postcode').val() || '')
+                : $.trim($('#billing_postcode').val() || '');
+
+            if (postcode) {
+                // Calculate shipping first, then proceed to the target step.
+                $('.fls-checkout-step-notice').remove();
+                calculateShippingForStep1(postcode, function () {
+                    setStep(targetStep);
+                });
+                return;
+            }
         }
 
         if (currentStep === 2) {
@@ -992,6 +1115,7 @@
                 syncDeliveryUi();
                 maybeDowngradeCompletedState();
                 updateStepButtons();
+                $(document.body).trigger('update_checkout');
             });
     }
 
@@ -1164,25 +1288,21 @@
         });
 
     $(document.body).on('updated_checkout', function () {
-        init(true);
+        // When we are in the middle of a shipping calculation (step 1→2
+        // transition), skip the full init so the step state is not reset
+        // back to 1. The callback from calculateShippingForStep1 will handle
+        // navigation after fragments have been replaced.
+        if (getState().calculatingShipping) {
+            // Re-bind only the essential UI that depends on fresh fragments.
+            initDeliveryState();
+            updateStepButtons();
+        } else {
+            init(true);
+        }
 
         setTimeout(function () {
             positionToastStack();
         }, 60);
-    });
-
-    $(window)
-        .off('resize.flsToastPosition scroll.flsToastPosition')
-        .on('resize.flsToastPosition scroll.flsToastPosition', function () {
-            positionToastStack();
-        });
-
-    $(function () {
-        init(true);
-    });
-
-    $(document.body).on('updated_checkout', function () {
-        init(true);
     });
 
     $(function () {
