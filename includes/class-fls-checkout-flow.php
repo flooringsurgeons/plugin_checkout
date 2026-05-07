@@ -132,7 +132,7 @@ class FLS_Checkout_Flow {
 	}
 
 	public function maybe_override_woocommerce_template( $template, $template_name, $template_path ) {
-		if ( ! $this->should_override_checkout() ) {
+		if ( ! $this->should_override_checkout() && ! $this->should_override_thankyou() ) {
 			return $template;
 		}
 
@@ -140,6 +140,7 @@ class FLS_Checkout_Flow {
 			'checkout/form-checkout.php',
 			'checkout/form-billing.php',
 			'checkout/form-shipping.php',
+			'checkout/thankyou.php',
 		);
 
 		if ( ! in_array( $template_name, $allowed_templates, true ) ) {
@@ -151,8 +152,8 @@ class FLS_Checkout_Flow {
 		return file_exists( $custom_template ) ? $custom_template : $template;
 	}
 
-	public function enqueue_assets() {
-		if ( ! $this->should_override_checkout() ) {
+	public function enqueue_assets(){
+		if ( ! $this->should_override_checkout() && ! $this->should_override_thankyou() ) {
 			return;
 		}
 
@@ -160,7 +161,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow-flatpickr',
 			FLS_CHECKOUT_FLOW_URL . 'assets/vendor/flatpickr/flatpickr.min.css',
 			array(),
-			'4.6.13-local'
+			'4.6.13'
 		);
 
 		wp_enqueue_style(
@@ -174,8 +175,8 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow-flatpickr',
 			FLS_CHECKOUT_FLOW_URL . 'assets/vendor/flatpickr/flatpickr.min.js',
 			array(),
-			'4.6.13-local',
-			true
+			'4.6.13',
+			['in_footer' => true]
 		);
 
 		wp_enqueue_script(
@@ -333,7 +334,6 @@ class FLS_Checkout_Flow {
 
 		$fragments['#fls-checkout-order-details']                  = $this->get_order_details_html();
 		$fragments['#fls-checkout-shipping-methods']               = $this->get_shipping_methods_html();
-		$fragments['#fls-checkout-payment']                        = $this->get_payment_html( $checkout );
 		$fragments['.fls-checkout-step__section--shipping-fields'] = $this->get_shipping_customer_section_html( $checkout );
 
 		return $fragments;
@@ -625,6 +625,20 @@ class FLS_Checkout_Flow {
 		);
 	}
 
+	private function has_coupon_discount_row( $discount_rows ) {
+		if ( empty( $discount_rows ) || ! is_array( $discount_rows ) ) {
+			return false;
+		}
+
+		foreach ( $discount_rows as $discount_row ) {
+			if ( ! empty( $discount_row['type'] ) && 'coupon' === $discount_row['type'] ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	private function get_coupon_block_html() {
 		ob_start();
 		?>
@@ -664,6 +678,7 @@ class FLS_Checkout_Flow {
 		$discount_data            = $this->get_order_details_discount_rows();
 		$discount_rows            = $discount_data['rows'];
 		$discount_total           = $discount_data['total'];
+		$has_coupon_discount      = $this->has_coupon_discount_row( $discount_rows );
 		$vat_data                 = $this->get_manual_vat_breakdown_data();
 
 		ob_start();
@@ -794,10 +809,12 @@ class FLS_Checkout_Flow {
                     </div>
 
                     <div class="fls-order-details__row--total">
-	                    <?php if ( $discount_total > 0 ) : ?>
+	                    <?php if ( $discount_total > 0 && $has_coupon_discount ) : ?>
                             <div class="fls-order-details__row fls-order-details__row--discount-total">
                                 <span><?php esc_html_e( 'Discount total', 'fls-checkout-flow' ); ?></span>
-                                <span class="fls-order-details__row-value fls-order-details__row-value--discount">- <?php echo wp_kses_post( wc_price( $discount_total ) ); ?></span>
+                                <span class="fls-order-details__row-value fls-order-details__row-value--discount">
+                                    - <?php echo wp_kses_post( wc_price( $discount_total ) ); ?>
+                                </span>
                             </div>
 	                    <?php endif; ?>
 
@@ -1155,6 +1172,13 @@ class FLS_Checkout_Flow {
 		if ( ! empty( $_POST['fls_delivery_date'] ) ) {
 			$order->update_meta_data( '_fls_delivery_date', sanitize_text_field( wp_unslash( $_POST['fls_delivery_date'] ) ) );
 		}
+
+		$vat_data = $this->get_manual_vat_breakdown_data();
+		$order->update_meta_data( '_fls_vat_breakdown', $vat_data );
+
+		$discount_data = $this->get_order_details_discount_rows();
+		$order->update_meta_data( '_fls_discount_rows', $discount_data['rows'] );
+		$order->update_meta_data( '_fls_discount_total', (float) $discount_data['total'] );
 	}
 
 	private function find_shipping_rate_by_id( $rate_id ) {
@@ -1833,5 +1857,56 @@ class FLS_Checkout_Flow {
 		}
 
 		return true;
+	}
+
+	private function should_override_thankyou() {
+		if ( is_admin() || wp_doing_ajax() ) {
+			return false;
+		}
+
+		if ( ! function_exists( 'is_checkout' ) || ! is_checkout() ) {
+			return false;
+		}
+
+		if ( ! function_exists( 'is_order_received_page' ) || ! is_order_received_page() ) {
+			return false;
+		}
+
+		return true;
+	}
+
+	public function maybe_override_thankyou_page_template( $template ) {
+		if ( ! $this->should_override_thankyou() ) {
+			return $template;
+		}
+
+		$custom_template = FLS_CHECKOUT_FLOW_PATH . 'templates/thankyou-page.php';
+
+		return file_exists( $custom_template ) ? $custom_template : $template;
+	}
+
+	public function save_order_line_item_meta( $item, $cart_item_key, $values, $order ) {
+		$product = $item->get_product();
+
+		if ( ! empty( $values['sample_product'] ) ) {
+			$item->add_meta_data( '_fls_is_sample_product', 'yes', true );
+			return;
+		}
+
+		$item->add_meta_data( '_fls_is_sample_product', 'no', true );
+
+		if ( ! $product ) {
+			return;
+		}
+
+		$pack_data = $this->get_order_item_pack_data( $values, $product );
+
+		if ( ! empty( $pack_data['packs'] ) ) {
+			$item->add_meta_data( '_fls_pack_count', (int) $pack_data['packs'], true );
+		}
+
+		if ( isset( $pack_data['total'] ) && null !== $pack_data['total'] ) {
+			$item->add_meta_data( '_fls_room_size', wc_format_decimal( (float) $pack_data['total'], 2 ), true );
+		}
 	}
 }

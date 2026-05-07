@@ -64,9 +64,17 @@
     color: #1f2937;
 }
 
+.fls-checkout-steps {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+}
+
 .fls-checkout-steps-nav {
     display: grid;
-    grid-template-columns: auto minmax(60px, 1fr) auto minmax(60px, 1fr) auto auto;
+    grid-template-columns: auto minmax(60px, 1fr) auto minmax(60px, 1fr) auto;
     align-items: center;
     gap: 18px;
     padding: 0px 15%;
@@ -757,7 +765,8 @@
 }
 
 .fls-checkout-payment .wc_payment_method {
-    border: 1px solid #d4d4d4;
+    position: relative;
+    border: 1px solid #D1D1D1;
     border-radius: 12px;
     padding: 14px 16px;
     display: flex;
@@ -802,6 +811,72 @@
     border-top: 1px solid #efefef;
     color: #4b5563;
     font-size: 14px;
+    line-height: 1.5;
+    font-weight: 400;
+    color: #5D5D5D;
+}
+
+.woocommerce-checkout #payment {
+    background: unset !important;
+    border-radius: unset !important;
+}
+
+.fls-checkout-payment .payment_box {
+    background: #FFFFFF !important;
+    border: 1px solid #D1D1D1;
+    padding: 14px 20px !important;
+    margin: 0 1rem 1rem !important;
+    width: unset !important;
+    border-radius: 0.5rem !important;
+}
+
+
+.fls-checkout-payment .payment_box::before {
+    display: none !important;
+}
+
+.fls-checkout-payment .payment_box p {
+    margin: 0 0 14px;
+}
+
+.fls-checkout-payment .payment_box fieldset {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    display: grid;
+    gap: 16px;
+}
+
+.fls-checkout-payment .payment_box .form-row {
+    margin: 0 !important;
+}
+
+.fls-checkout-payment .payment_box input[type="text"],
+.fls-checkout-payment .payment_box input[type="tel"],
+.fls-checkout-payment .payment_box input[type="email"],
+.fls-checkout-payment .payment_box input[type="number"],
+.fls-checkout-payment .payment_box select {
+    width: 100%;
+    height: 56px !important;
+    border: 1px solid #D1D1D1 !important;
+    border-radius: 14px !important;
+    background: #ffffff !important;
+    padding: 0 18px !important;
+    font-size: 15px !important;
+    color: #5D5D5D !important;
+    box-sizing: border-box;
+    box-shadow: none !important;
+    transition: border-color 0.2s ease;
+}
+
+.fls-checkout-payment .payment_box input[type="text"]:focus,
+.fls-checkout-payment .payment_box input[type="tel"]:focus,
+.fls-checkout-payment .payment_box input[type="email"]:focus,
+.fls-checkout-payment .payment_box input[type="number"]:focus,
+.fls-checkout-payment .payment_box select:focus {
+    outline: 0;
+    border-color: #888888 !important;
+    box-shadow: none !important;
 }
 
 .fls-checkout-payment .woocommerce-privacy-policy-text,
