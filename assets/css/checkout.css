@@ -637,6 +637,18 @@
     background: #262626;
 }
 
+.fls-shipping-card.is-disabled {
+    opacity: 0.45;
+    pointer-events: none;
+    cursor: not-allowed;
+}
+
+.fls-delivery-method__date-row.is-disabled {
+    opacity: 0.45;
+    pointer-events: none;
+    cursor: not-allowed;
+}
+
 .fls-shipping-card__content {
     display: flex;
     align-items: center;
@@ -1535,6 +1547,25 @@
 .fls-delivery-method__warning-text span {
     color: #a16207;
     font-size: 13px;
+}
+
+/* error variant – service/validation failures */
+.fls-delivery-method__warning--error {
+    background: #fef2f2;
+    border-color: #fecaca;
+    color: #b91c1c;
+}
+
+.fls-delivery-method__warning--error .fls-delivery-method__warning-icon {
+    color: #dc2626;
+}
+
+.fls-delivery-method__warning--error .fls-delivery-method__warning-text strong {
+    color: #991b1b;
+}
+
+.fls-delivery-method__warning--error .fls-delivery-method__warning-text span {
+    color: #b91c1c;
 }
 
 

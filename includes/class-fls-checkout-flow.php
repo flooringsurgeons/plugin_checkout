@@ -168,7 +168,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/css/checkout.css',
 			array( 'fls-checkout-flow-flatpickr' ),
-			'2.8.23'
+			'2.8.25'
 		);
 
 		wp_enqueue_script(
@@ -183,15 +183,34 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/js/checkout.js',
 			array( 'jquery', 'wc-checkout', 'fls-checkout-flow-flatpickr' ),
-			'2.8.3',
+			'2.8.7',
 			true
 		);
+
+		$backorder_min_date = '';
+		if ( WC()->cart ) {
+			foreach ( WC()->cart->get_cart() as $cart_item ) {
+				$product = isset( $cart_item['data'] ) ? $cart_item['data'] : null;
+				if ( ! ( $product instanceof WC_Product ) ) {
+					continue;
+				}
+				if ( 'onbackorder' === $product->get_stock_status() ) {
+					$avail_date = get_post_meta( $product->get_id(), 'woo_feed_availability_date', true );
+					if ( $avail_date ) {
+						if ( empty( $backorder_min_date ) || $avail_date > $backorder_min_date ) {
+							$backorder_min_date = sanitize_text_field( $avail_date );
+						}
+					}
+				}
+			}
+		}
 
 		wp_localize_script(
 			'fls-checkout-flow',
 			'flsCheckoutFlow',
 			array(
-				'activeStep' => 1,
+				'activeStep'        => 1,
+				'backorderMinDate'  => $backorder_min_date,
 				'coupon'     => array(
 					'applyNonce'  => wp_create_nonce( 'apply-coupon' ),
 					'removeNonce' => wp_create_nonce( 'remove-coupon' ),
@@ -1207,6 +1226,10 @@ class FLS_Checkout_Flow {
 		return wc_price( $total );
 	}
 
+	public function render_payment_html() {
+		woocommerce_checkout_payment();
+	}
+
 	public function get_payment_html( $checkout ) {
 		ob_start();
 		?>
@@ -1483,41 +1506,16 @@ class FLS_Checkout_Flow {
 	/**
 	 * Resolve a UK postcode to one of our four internal region keys.
 	 *
-	 * Tries the postcodes.io API first; falls back to a local prefix-based
-	 * lookup if the API is unavailable or returns an unexpected value.
+	 * Uses postcodes.io as the single source of truth.
+	 *
+	 * If API lookup fails or returns an unknown country, returns null so
+	 * callers can surface a hard error to the user.
 	 *
 	 * @param string $postcode
-	 * @return string  One of: 'england' | 'scotland' | 'wales' | 'northern_ireland'
+	 * @return string|null  One of: 'england' | 'scotland' | 'wales' | 'northern_ireland'
 	 */
 	private function get_uk_region_for_postcode( $postcode ) {
-		// Primary: live API lookup.
-		$api_region = $this->fetch_postcode_region_from_api( $postcode );
-
-		if ( null !== $api_region ) {
-			return $api_region;
-		}
-
-		// Fallback: prefix-based heuristic when the API is unreachable.
-		$clean = strtoupper( preg_replace( '/\s+/', '', (string) $postcode ) );
-		$area  = preg_replace( '/[^A-Z].*/', '', $clean );
-
-		$northern_ireland = array( 'BT' );
-		$scotland         = array( 'AB', 'DD', 'DG', 'EH', 'FK', 'G', 'HS', 'IV', 'KA', 'KW', 'KY', 'ML', 'PA', 'PH', 'TD', 'ZE' );
-		$wales            = array( 'CF', 'CH', 'LD', 'LL', 'NP', 'SA', 'SY' );
-
-		if ( in_array( $area, $northern_ireland, true ) ) {
-			return 'northern_ireland';
-		}
-
-		if ( in_array( $area, $scotland, true ) ) {
-			return 'scotland';
-		}
-
-		if ( in_array( $area, $wales, true ) ) {
-			return 'wales';
-		}
-
-		return 'england';
+		return $this->fetch_postcode_region_from_api( $postcode );
 	}
 
 	/**
@@ -1538,6 +1536,11 @@ class FLS_Checkout_Flow {
 		}
 
 		$region   = $this->get_uk_region_for_postcode( $postcode );
+
+		if ( null === $region ) {
+			return null;
+		}
+
 		$settings = $this->get_post_price_settings();
 
 		$enabled_regions = isset( $settings['enabled_regions'] ) ? (array) $settings['enabled_regions'] : array();
@@ -1654,12 +1657,24 @@ class FLS_Checkout_Flow {
 		$postcode = isset( $_POST['postcode'] ) ? sanitize_text_field( wp_unslash( $_POST['postcode'] ) ) : '';
 
 		if ( empty( $postcode ) ) {
-			wp_send_json_error( array( 'message' => __( 'Postcode is required.', 'fls-checkout-flow' ) ) );
+			wp_send_json_error( array( 'message' => __( 'Postcode is required.', 'fls-checkout-flow' ), 'error_type' => 'postcode_required' ) );
 			return;
 		}
 
 		if ( ! WC()->session || ! WC()->customer ) {
-			wp_send_json_error( array( 'message' => __( 'Session not available.', 'fls-checkout-flow' ) ) );
+			wp_send_json_error( array( 'message' => __( 'Session not available.', 'fls-checkout-flow' ), 'error_type' => 'session_error' ) );
+			return;
+		}
+
+		$resolved_region = $this->get_uk_region_for_postcode( $postcode );
+
+		if ( null === $resolved_region ) {
+			WC()->session->set( 'fls_calculated_shipping_postcode', '' );
+			WC()->session->set( 'fls_calculated_shipping_amount', null );
+			WC()->session->set( 'fls_delivery_available', null );
+			WC()->session->set( 'fls_free_shipping', null );
+
+			wp_send_json_error( array( 'message' => __( 'We could not validate this postcode right now. Please check the postcode and try again.', 'fls-checkout-flow' ), 'error_type' => 'service_error' ) );
 			return;
 		}
 

@@ -3,7 +3,7 @@
  * Plugin Name: FLS Checkout Flow
  * Description: Custom checkout flow foundation for Floorista. Overrides WooCommerce checkout and thank you page templates with a plugin structure.
  * Version: 2.0.0
- * Author: MeysamWeb
+ * Author: MeysamWeb & Ghaseminia
  * Text Domain: fls-checkout-flow
  * Requires Plugins: woocommerce
  */

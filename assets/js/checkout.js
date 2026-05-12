@@ -497,6 +497,8 @@
 
         function startLoading() {
             state.calculatingShipping = true;
+            $('[data-fls-delivery-service-error]').remove();
+            setDeliveryPanelDisabled(false);
             $postcodeField.addClass('fls-field--calculating');
             setButtonLoading($continueBtn, true);
         }
@@ -507,15 +509,15 @@
             setButtonLoading($continueBtn, false);
         }
 
-        function finish() {
+        function finish(success, message) {
             stopLoading();
             if (typeof onDone === 'function') {
-                onDone();
+                onDone(!!success, message || '');
             }
         }
 
         if (!postcode || !nonce || !ajaxUrl) {
-            finish();
+            finish(false, getI18nMessage('shippingCalcError', 'Unable to calculate shipping right now. Please try again.'));
             return;
         }
 
@@ -530,6 +532,15 @@
                 postcode: postcode
             }
         }).done(function (response) {
+            if (!response || !response.success) {
+                state.deliveryAvailable = false;
+                state.shippingIsFree = false;
+                finish(false, response && response.data && response.data.message
+                    ? response.data.message
+                    : getI18nMessage('shippingCalcError', 'Unable to calculate shipping right now. Please try again.'));
+                return;
+            }
+
             // Store delivery availability in state so the UI can react.
             if (response && response.data) {
                 state.deliveryAvailable = !!response.data.delivery_available;
@@ -549,17 +560,19 @@
             // Safety timeout = 8 s so checkout is never permanently blocked.
             var wcTimeout = setTimeout(function () {
                 $(document.body).off('updated_checkout.flsShippingCalc');
-                finish();
+                finish(true);
             }, 8000);
 
             $(document.body).one('updated_checkout.flsShippingCalc', function () {
                 clearTimeout(wcTimeout);
-                finish();
+                finish(true);
             });
 
             $(document.body).trigger('update_checkout');
         }).fail(function () {
-            finish();
+            state.deliveryAvailable = false;
+            state.shippingIsFree = false;
+            finish(false, getI18nMessage('shippingCalcError', 'Unable to calculate shipping right now. Please try again.'));
         });
     }
 
@@ -626,6 +639,46 @@
         const markup = '<div class="fls-checkout-step-notice fls-checkout-step-notice--' + type + '">' + safeMessage + '</div>';
 
         $('.fls-checkout-shell').first().prepend(markup);
+    }
+
+    function setDeliveryPanelDisabled(disabled) {
+        const $panel = $('[data-fls-delivery-panel="delivery"]');
+        $panel.find('[data-fls-shipping-card]').toggleClass('is-disabled', disabled);
+        $panel.find('.shipping_method').prop('disabled', disabled);
+        $panel.find('[data-fls-date-wrap="delivery"]').toggleClass('is-disabled', disabled);
+        $panel.find('[data-fls-date-display="delivery"]').prop('disabled', disabled);
+        if (flatpickrInstances['delivery']) {
+            flatpickrInstances['delivery'].set('clickOpens', !disabled);
+        }
+    }
+
+    function showDeliveryPanelError(message) {
+        $('[data-fls-delivery-service-error]').remove();
+
+        const safeMessage = $('<div />').text(message).html();
+        const icon = '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">'
+            + '<path d="M10 18.3337C14.6024 18.3337 18.3333 14.6027 18.3333 10.0003C18.3333 5.39795 14.6024 1.66699 10 1.66699C5.39762 1.66699 1.66666 5.39795 1.66666 10.0003C1.66666 14.6027 5.39762 18.3337 10 18.3337Z" stroke="currentColor" stroke-width="1.5"/>'
+            + '<path d="M10 6.66699V10.8337" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'
+            + '<path d="M9.99539 13.333H10.0029" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+            + '</svg>';
+        const html = '<div class="fls-delivery-method__warning" data-fls-delivery-service-error>'
+            + '<span class="fls-delivery-method__warning-icon" aria-hidden="true">' + icon + '</span>'
+            + '<span class="fls-delivery-method__warning-text"><strong>' + safeMessage + '</strong></span>'
+            + '</div>';
+
+        const $actions = $('#fls-checkout-shipping-methods .fls-checkout-step__actions').first();
+        if ($actions.length) {
+            $actions.before(html);
+        } else {
+            const $panel = $('[data-fls-delivery-panel="delivery"]');
+            if ($panel.length) {
+                $panel.append(html);
+            } else {
+                $('[data-fls-delivery-method]').append(html);
+            }
+        }
+
+        setDeliveryPanelDisabled(true);
     }
 
     /* ---------------------------------------------
@@ -812,7 +865,13 @@
             if (postcode) {
                 // Calculate shipping first, then proceed to the target step.
                 $('.fls-checkout-step-notice').remove();
-                calculateShippingForStep1(postcode, function () {
+                calculateShippingForStep1(postcode, function (success, message) {
+                    if (!success) {
+                        setStep(targetStep);
+                        showDeliveryPanelError(message || getI18nMessage('shippingCalcError', 'Unable to calculate shipping right now. Please try again.'));
+                        return;
+                    }
+
                     setStep(targetStep);
                 });
                 return;
@@ -1151,6 +1210,20 @@
         flatpickrInstances = {};
     }
 
+    function getBackorderMinDate() {
+        var raw = window.flsCheckoutFlow && window.flsCheckoutFlow.backorderMinDate;
+        if (!raw) {
+            return 'today';
+        }
+        var d = new Date(raw);
+        if (isNaN(d.getTime())) {
+            return 'today';
+        }
+        var today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return d > today ? d : 'today';
+    }
+
     function initFlatpickrInputs() {
         if (typeof window.flatpickr !== 'function') {
             return;
@@ -1164,7 +1237,7 @@
             const $wrap = $(input).closest('[data-fls-date-wrap]');
 
             flatpickrInstances[mode] = window.flatpickr(input, {
-                minDate: 'today',
+                minDate: getBackorderMinDate(),
                 dateFormat: 'F j, Y',
                 disableMobile: true,
                 defaultDate: getDateForMode(mode) || null,
