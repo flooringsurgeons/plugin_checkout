@@ -183,7 +183,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/js/checkout.js',
 			array( 'jquery', 'wc-checkout', 'fls-checkout-flow-flatpickr' ),
-			'2.8.7',
+			'2.8.13',
 			true
 		);
 
@@ -220,16 +220,18 @@ class FLS_Checkout_Flow {
 					'ajaxUrl'   => admin_url( 'admin-ajax.php' ),
 				),
 				'i18n'       => array(
-					'stepOneError'      => __( 'Please complete the required customer details before continuing.', 'fls-checkout-flow' ),
-					'stepTwoError'      => __( 'Please choose a delivery option before continuing.', 'fls-checkout-flow' ),
-					'stepTwoDateError'  => __( 'Please choose a date before continuing.', 'fls-checkout-flow' ),
-					'chooseDate'        => __( 'Select your date', 'fls-checkout-flow' ),
-					'discountApplied'  => __( 'Discount Applied', 'fls-checkout-flow' ),
-					'couponRemoved'    => __( 'Coupon has been removed.', 'woocommerce' ),
-					'couponEmpty'      => __( 'Please enter a discount code.', 'fls-checkout-flow' ),
-					'couponApplyError' => __( 'Something went wrong while applying the coupon.', 'fls-checkout-flow' ),
-					'couponRemoveError'=> __( 'Something went wrong while removing the coupon.', 'fls-checkout-flow' ),
-					'couponApplyLabel' => __( 'Apply', 'woocommerce' ),
+					'stepOneError'          => __( 'Please complete the required customer details before continuing.', 'fls-checkout-flow' ),
+					'stepTwoError'          => __( 'Please choose a delivery option before continuing.', 'fls-checkout-flow' ),
+					'stepTwoDateError'      => __( 'Please choose a date before continuing.', 'fls-checkout-flow' ),
+					'chooseDate'            => __( 'Select your date', 'fls-checkout-flow' ),
+					'deliveryNotAvailable'  => __( 'Delivery is not available in your area yet.', 'fls-checkout-flow' ),
+					'deliveryNotAvailableSub' => __( 'Enter another postcode or select in-store pickup to continue.', 'fls-checkout-flow' ),
+					'discountApplied'       => __( 'Discount Applied', 'fls-checkout-flow' ),
+					'couponRemoved'         => __( 'Coupon has been removed.', 'woocommerce' ),
+					'couponEmpty'           => __( 'Please enter a discount code.', 'fls-checkout-flow' ),
+					'couponApplyError'      => __( 'Something went wrong while applying the coupon.', 'fls-checkout-flow' ),
+					'couponRemoveError'     => __( 'Something went wrong while removing the coupon.', 'fls-checkout-flow' ),
+					'couponApplyLabel'      => __( 'Apply', 'woocommerce' ),
 				),
 			)
 		);
@@ -917,6 +919,13 @@ class FLS_Checkout_Flow {
 		$delivery_available = WC()->session ? WC()->session->get( 'fls_delivery_available' ) : null;
 		$delivery_blocked   = $has_calculated && ! $delivery_available;
 
+		// The session flag is the single source of truth for delivery availability.
+		// When delivery is blocked, discard any stale WC-cached or race-condition
+		// delivery rates so the panel renders ONLY the unavailability warning.
+		if ( $delivery_blocked ) {
+			$delivery_rates = array();
+		}
+
 		$active_mode = 'pickup' === $stored_mode && ! empty( $pickup_rates ) ? 'pickup' : 'delivery';
 
 		// When delivery is blocked and no delivery rates exist, still keep
@@ -967,7 +976,7 @@ class FLS_Checkout_Flow {
 					<?php if ( $delivery_blocked ) : ?>
                     <div class="fls-delivery-method__warning" data-fls-delivery-warning>
                         <span class="fls-delivery-method__warning-icon" aria-hidden="true">
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 18.3337C14.6024 18.3337 18.3333 14.6027 18.3333 10.0003C18.3333 5.39795 14.6024 1.66699 10 1.66699C5.39762 1.66699 1.66666 5.39795 1.66666 10.0003C1.66666 14.6027 5.39762 18.3337 10 18.3337Z" stroke="currentColor" stroke-width="1.5"/><path d="M10 6.66699V10.8337" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M9.99539 13.333H10.0029" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8.57465 3.21667L1.51631 15C1.37079 15.2529 1.29379 15.5389 1.29297 15.8304C1.29215 16.1219 1.36754 16.4083 1.51163 16.662C1.65572 16.9157 1.86342 17.1276 2.11384 17.2764C2.36425 17.4252 2.64864 17.5057 2.93965 17.5H17.0563C17.3473 17.5057 17.6317 17.4252 17.8821 17.2764C18.1325 17.1276 18.3402 16.9157 18.4843 16.662C18.6284 16.4083 18.7038 16.1219 18.703 15.8304C18.7022 15.5389 18.6252 15.2529 18.4796 15L11.4213 3.21667C11.2727 2.97138 11.0635 2.76865 10.814 2.62882C10.5645 2.48899 10.2836 2.41602 9.99798 2.41602C9.71235 2.41602 9.43143 2.48899 9.18197 2.62882C8.93251 2.76865 8.72324 2.97138 8.57465 3.21667Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 7.5V10.8333" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 13.75H10.0083" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         </span>
                         <span class="fls-delivery-method__warning-text">
                             <strong><?php esc_html_e( 'Delivery is not available in your area yet.', 'fls-checkout-flow' ); ?></strong>
@@ -1360,11 +1369,11 @@ class FLS_Checkout_Flow {
 		$chosen_methods = (array) WC()->session->get( 'chosen_shipping_methods', array() );
 		$packages       = WC()->shipping()->get_packages();
 
-		// Determine whether the user has explicitly posted a delivery mode
-		// (sent by the checkout form during update_order_review requests).
-		$posted_mode = isset( $_POST['fls_delivery_mode'] )
-			? sanitize_text_field( wp_unslash( $_POST['fls_delivery_mode'] ) )
-			: '';
+		// Determine whether the user has explicitly posted a delivery mode.
+		// During update_order_review AJAX calls, form fields arrive inside
+		// $_POST['post_data'], not as top-level POST vars — so we must use
+		// get_posted_checkout_value() which checks both locations.
+		$posted_mode = $this->get_posted_checkout_value( 'fls_delivery_mode' );
 
 		foreach ( $packages as $pkg_index => $package ) {
 			$chosen_id = isset( $chosen_methods[ $pkg_index ] ) ? $chosen_methods[ $pkg_index ] : '';
@@ -1787,29 +1796,14 @@ class FLS_Checkout_Flow {
 		$new_rates = array();
 
 		if ( $is_free ) {
-			// Free shipping rate — pre-selected.
-			$free_label = __( 'Free Shipping', 'fls-checkout-flow' );
-			$free_rate  = new WC_Shipping_Rate(
+			// Free shipping only — do not show paid alternatives alongside it.
+			$new_rates['fls_free_shipping'] = new WC_Shipping_Rate(
 				'fls_free_shipping',
-				$free_label,
+				__( 'Free Shipping', 'fls-checkout-flow' ),
 				0,
 				array(),
 				'free_shipping'
 			);
-			$new_rates['fls_free_shipping'] = $free_rate;
-
-			// Also show the standard paid rate as an alternative.
-			if ( (float) $amount > 0 ) {
-				$std_label    = __( 'Standard Shipping', 'fls-checkout-flow' );
-				$standard_rate = new WC_Shipping_Rate(
-					'fls_post_price_shipping',
-					$std_label,
-					(float) $amount,
-					array(),
-					'flat_rate'
-				);
-				$new_rates['fls_post_price_shipping'] = $standard_rate;
-			}
 		} else {
 			// Standard shipping with region description.
 			$std_label    = __( 'Standard Shipping', 'fls-checkout-flow' );
