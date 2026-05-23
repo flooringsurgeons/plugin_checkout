@@ -38,14 +38,48 @@
             return wc_checkout_params.wc_ajax_url.toString().replace('%%endpoint%%', endpoint);
         },
 
-        backorderMinDate() {
+        getBackorderMinDate() {
             const raw = this.get('backorderMinDate', '');
-            if (!raw) return 'today';
+            if (!raw) return null;
             const d = new Date(raw);
-            if (isNaN(d.getTime())) return 'today';
+            if (isNaN(d.getTime())) return null;
             const today = new Date();
             today.setHours(0, 0, 0, 0);
-            return d > today ? d : 'today';
+            return d > today ? d : null;
+        },
+
+        getUkDeliveryMinDate() {
+            const now = new Date();
+            const ukDate = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/London' }));
+            const day = ukDate.getDay(); // 0=Sun, 6=Sat
+            const hour = ukDate.getHours();
+
+            let offset;
+            if (day === 6) {
+                offset = 4; // Saturday: skip Sat+Sun + 2 working days = Wednesday
+            } else if (day === 0) {
+                offset = 3; // Sunday: skip Sun + 2 working days = Wednesday
+            } else {
+                offset = (hour >= 9 && hour < 17) ? 2 : 3; // working hours vs after hours
+            }
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const min = new Date(today);
+            min.setDate(min.getDate() + offset);
+
+            // If result lands on weekend, advance to Monday
+            while (min.getDay() === 0 || min.getDay() === 6) {
+                min.setDate(min.getDate() + 1);
+            }
+
+            return min;
+        },
+
+        deliveryMinDate() {
+            const backorder = this.getBackorderMinDate();
+            if (backorder) return backorder;
+            return this.getUkDeliveryMinDate();
         }
     };
 
@@ -220,8 +254,10 @@
                 const input = this;
                 const mode = $(input).attr('data-fls-date-display');
                 const $wrap = $(input).closest('[data-fls-date-wrap]');
-                DatePicker.instances[mode] = window.flatpickr(input, {
-                    minDate: Config.backorderMinDate(),
+                const isDelivery = mode === 'delivery';
+
+                const options = {
+                    minDate: Config.deliveryMinDate(),
                     dateFormat: 'F j, Y',
                     disableMobile: true,
                     defaultDate: Delivery.getDate(mode) || null,
@@ -252,7 +288,15 @@
                         Validation.maybeDowngrade();
                         Steps.updateButtons();
                     }
-                });
+                };
+
+                if (isDelivery) {
+                    options.disable = [function (date) {
+                        return date.getDay() === 0 || date.getDay() === 6;
+                    }];
+                }
+
+                DatePicker.instances[mode] = window.flatpickr(input, options);
             });
         },
 
