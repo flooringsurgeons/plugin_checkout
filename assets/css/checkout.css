@@ -754,6 +754,151 @@
 .fls-flatpickr-calendar {
     border-radius: 14px;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
+    width: 320px !important;
+    padding: 16px;
+}
+
+/* ── Calendar header ── */
+.fls-flatpickr-calendar .flatpickr-months {
+    align-items: center;
+    padding: 0 0 12px;
+}
+
+.fls-flatpickr-calendar .flatpickr-months .flatpickr-month {
+    height: 40px;
+}
+
+.fls-flatpickr-calendar .flatpickr-current-month {
+    font-size: 16px;
+    font-weight: 700;
+    padding-top: 0;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
+/* Month name — plain bold text (monthSelectorType: static renders a span) */
+.fls-flatpickr-calendar .flatpickr-current-month span.cur-month {
+    font-weight: 700;
+    color: #1f2937;
+    font-size: 16px;
+    margin: 0;
+    padding: 0;
+}
+
+.fls-flatpickr-calendar .flatpickr-current-month span.cur-month:hover {
+    background: transparent;
+}
+
+/* Hide year completely */
+.fls-flatpickr-calendar .flatpickr-current-month .numInputWrapper {
+    display: none !important;
+}
+
+/* Navigation arrows — rounded square icon buttons */
+.fls-flatpickr-calendar .flatpickr-months .flatpickr-prev-month,
+.fls-flatpickr-calendar .flatpickr-months .flatpickr-next-month {
+    position: relative;
+    top: auto;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: #f3f4f6;
+    color: #374151;
+    fill: #374151;
+    transition: background 0.15s ease;
+}
+
+.fls-flatpickr-calendar .flatpickr-months .flatpickr-prev-month:hover,
+.fls-flatpickr-calendar .flatpickr-months .flatpickr-next-month:hover {
+    background: #e5e7eb;
+    color: #1f2937;
+    fill: #1f2937;
+}
+
+.fls-flatpickr-calendar .flatpickr-months .flatpickr-prev-month svg,
+.fls-flatpickr-calendar .flatpickr-months .flatpickr-next-month svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* ── Day header row ── */
+.fls-flatpickr-calendar .flatpickr-weekdays {
+    height: 36px;
+}
+
+.fls-flatpickr-calendar span.flatpickr-weekday {
+    font-size: 13px;
+    font-weight: 600;
+    color: #9ca3af;
+}
+
+/* ── Day cells ── */
+.fls-flatpickr-calendar .flatpickr-days,
+.fls-flatpickr-calendar .dayContainer {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+}
+
+.fls-flatpickr-calendar .flatpickr-day {
+    max-width: none;
+    height: 40px;
+    line-height: 40px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #374151;
+    flex-basis: calc(100% / 7);
+}
+
+/* Hover state */
+.fls-flatpickr-calendar .flatpickr-day:hover,
+.fls-flatpickr-calendar .flatpickr-day:focus {
+    background: #f3f4f6;
+    border-color: transparent;
+    border-radius: 8px;
+}
+
+/* Selected date — teal rounded square */
+.fls-flatpickr-calendar .flatpickr-day.selected,
+.fls-flatpickr-calendar .flatpickr-day.selected:hover,
+.fls-flatpickr-calendar .flatpickr-day.selected:focus {
+    background: #389382;
+    border-color: #389382;
+    border-radius: 8px;
+    color: #ffffff;
+}
+
+/* Today — teal border only */
+.fls-flatpickr-calendar .flatpickr-day.today {
+    border-color: #389382;
+}
+
+.fls-flatpickr-calendar .flatpickr-day.today:hover,
+.fls-flatpickr-calendar .flatpickr-day.today:focus {
+    background: #389382;
+    border-color: #389382;
+    color: #ffffff;
+    border-radius: 8px;
+}
+
+/* Out-of-month and disabled days */
+.fls-flatpickr-calendar .flatpickr-day.prevMonthDay,
+.fls-flatpickr-calendar .flatpickr-day.nextMonthDay {
+    color: #d1d5db;
+}
+
+.fls-flatpickr-calendar .flatpickr-day.flatpickr-disabled,
+.fls-flatpickr-calendar .flatpickr-day.flatpickr-disabled:hover {
+    color: #d1d5db;
+    cursor: not-allowed;
 }
 
 

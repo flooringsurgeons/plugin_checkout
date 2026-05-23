@@ -266,6 +266,13 @@
                     static: true,
                     appendTo: $wrap.length ? $wrap.get(0) : undefined,
                     positionElement: input,
+                    monthSelectorType: 'static',
+                    locale: {
+                        weekdays: {
+                            shorthand: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'],
+                            longhand: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+                        }
+                    },
                     onReady(_, __, instance) {
                         if (instance.calendarContainer) {
                             $(instance.calendarContainer).addClass('fls-flatpickr-calendar');
