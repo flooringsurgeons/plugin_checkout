@@ -168,7 +168,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/css/checkout.css',
 			array( 'fls-checkout-flow-flatpickr' ),
-			'2.8.25'
+			'2.8.26'
 		);
 
 		wp_enqueue_script(

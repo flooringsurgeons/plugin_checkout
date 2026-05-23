@@ -913,7 +913,7 @@
     line-height: 1.45;
 }
 
-.fls-checkout-payment__email-optin-checkbox,
+.fls-checkout-payment .fls-checkout-payment__email-optin-checkbox,
 .fls-checkout-payment .woocommerce-terms-and-conditions-wrapper .woocommerce-form__input-checkbox {
     flex-shrink: 0;
     appearance: none;
@@ -929,13 +929,13 @@
     position: relative;
 }
 
-.fls-checkout-payment__email-optin-checkbox:checked,
+.fls-checkout-payment .fls-checkout-payment__email-optin-checkbox:checked,
 .fls-checkout-payment .woocommerce-terms-and-conditions-wrapper .woocommerce-form__input-checkbox:checked {
     background: #389382;
     border-color: #389382;
 }
 
-.fls-checkout-payment__email-optin-checkbox:checked::after,
+.fls-checkout-payment .fls-checkout-payment__email-optin-checkbox:checked::after,
 .fls-checkout-payment .woocommerce-terms-and-conditions-wrapper .woocommerce-form__input-checkbox:checked::after {
     content: "";
     position: absolute;
