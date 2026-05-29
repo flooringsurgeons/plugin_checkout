@@ -168,7 +168,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/css/checkout.css',
 			array( 'fls-checkout-flow-flatpickr' ),
-			'2.8.28'
+			'2.8.30'
 		);
 
 		wp_enqueue_script(
@@ -264,7 +264,7 @@ class FLS_Checkout_Flow {
 				'billing_last_name'  => array( 'width' => 'half', 'placeholder' => __( 'Last Name', 'fls-checkout-flow' ), 'priority' => 20 ),
 				'billing_email'      => array( 'width' => 'half', 'placeholder' => __( 'Email Address', 'fls-checkout-flow' ), 'priority' => 30 ),
 				'billing_phone'      => array( 'width' => 'half', 'placeholder' => __( 'Contact Number', 'fls-checkout-flow' ), 'priority' => 40 ),
-				'billing_address_1'  => array( 'width' => 'wide', 'placeholder' => __( 'Street Address', 'fls-checkout-flow' ), 'priority' => 50 ),
+				'billing_address_1'  => array( 'width' => 'wide', 'placeholder' => __( 'House number and street name', 'fls-checkout-flow' ), 'priority' => 50 ),
 				'billing_city'       => array( 'width' => 'half', 'placeholder' => __( 'Town/City', 'fls-checkout-flow' ), 'priority' => 60 ),
 				'billing_postcode'   => array( 'width' => 'half', 'placeholder' => __( 'Postcode', 'fls-checkout-flow' ), 'priority' => 70 ),
 				'billing_country'    => array( 'width' => 'half', 'placeholder' => __( 'Country/Region', 'fls-checkout-flow' ), 'priority' => 80 ),

@@ -49,14 +49,15 @@ if ( ! $checkout->is_registration_enabled() && $checkout->is_registration_requir
         </div>
         <?php endif; ?>
 
-        <div class="fls-checkout-steps-nav" data-fls-steps-nav>
-            <button type="button" class="fls-checkout-steps-nav__item is-active" data-fls-step-trigger="1">
-                <span class="fls-checkout-steps-nav__dot"></span>
-                <svg width="16" height="15" viewBox="0 0 16 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M7.87537 0C5.94252 0 4.37512 1.56666 4.37512 3.50025C4.37512 5.43383 5.94252 7.00049 7.87537 7.00049C9.80822 7.00049 11.3756 5.4331 11.3756 3.50025C11.3756 1.5674 9.80896 0 7.87537 0ZM7.87537 8.64024C5.24705 8.64024 0 9.95957 0 12.5776V14.7651H15.75V12.5776C15.75 9.95957 10.5037 8.64024 7.87463 8.64024H7.87537Z" fill="currentColor"/>
-                </svg>
-                <span class="fls-checkout-steps-nav__label"><?php esc_html_e( 'Details', 'fls-checkout-flow' ); ?></span>
-            </button>
+        <div class="fls-checkout-nav-row">
+            <div class="fls-checkout-steps-nav" data-fls-steps-nav>
+                <button type="button" class="fls-checkout-steps-nav__item is-active" data-fls-step-trigger="1">
+                    <span class="fls-checkout-steps-nav__dot"></span>
+                    <svg width="16" height="15" viewBox="0 0 16 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M7.87537 0C5.94252 0 4.37512 1.56666 4.37512 3.50025C4.37512 5.43383 5.94252 7.00049 7.87537 7.00049C9.80822 7.00049 11.3756 5.4331 11.3756 3.50025C11.3756 1.5674 9.80896 0 7.87537 0ZM7.87537 8.64024C5.24705 8.64024 0 9.95957 0 12.5776V14.7651H15.75V12.5776C15.75 9.95957 10.5037 8.64024 7.87463 8.64024H7.87537Z" fill="currentColor"/>
+                    </svg>
+                    <span class="fls-checkout-steps-nav__label"><?php esc_html_e( 'Details', 'fls-checkout-flow' ); ?></span>
+                </button>
 
                 <span class="fls-checkout-steps-nav__line" aria-hidden="true"></span>
 
@@ -81,7 +82,7 @@ if ( ! $checkout->is_registration_enabled() && $checkout->is_registration_requir
 
             <?php if (!is_user_logged_in()): ?>
                 <a class="fls-checkout-steps-nav__account" href="<?= esc_url( $flow->get_checkout_account_url() ); ?>">
-		            <?= esc_html( __( 'Login/Register', 'fls-checkout-flow' ) ); ?>
+                    <?= esc_html( __( 'Login/Register', 'fls-checkout-flow' ) ); ?>
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M8.33398 14.1666L12.5007 9.99998L8.33398 5.83331" stroke="#454545" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         <path d="M12.5 10H2.5" stroke="#454545" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -89,6 +90,7 @@ if ( ! $checkout->is_registration_enabled() && $checkout->is_registration_requir
                     </svg>
                 </a>
             <?php endif; ?>
+        </div>
 
         <?php if ( $checkout->get_checkout_fields() ) : ?>
             <?php do_action( 'woocommerce_checkout_before_customer_details' ); ?>

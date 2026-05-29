@@ -72,6 +72,15 @@
     width: 100%;
 }
 
+.fls-checkout-nav-row {
+    display: flex;
+    align-items: center;
+}
+
+.fls-checkout-nav-row .fls-checkout-steps-nav {
+    flex: 1;
+}
+
 .fls-checkout-steps-nav {
     display: grid;
     grid-template-columns: auto minmax(60px, 1fr) auto minmax(60px, 1fr) auto;
@@ -113,7 +122,7 @@
 }
 
 .fls-checkout-steps-nav__item.is-locked {
-    opacity: 0.55;
+    color: #2D2D2D;
     cursor: not-allowed;
 }
 
@@ -191,11 +200,12 @@
     border: 1px solid #2D2D2D;
     border-radius: 0.5rem;
     color: #454545;
-    font-size: 1rem;
+    font-size: 14px;
     font-weight: 500;
     height: 36px;
-    position: absolute;
-    right: 100px;
+    text-decoration: none;
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .fls-checkout-layout {
@@ -1585,7 +1595,7 @@
         background-size: 11px 2px;
     }
 
-    .fls-checkout-steps-nav > .fls-checkout-steps-nav__account {
+    .fls-checkout-nav-row > .fls-checkout-steps-nav__account {
         display: none;
     }
 
