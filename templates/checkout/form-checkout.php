@@ -159,6 +159,7 @@ if ( ! $checkout->is_registration_enabled() && $checkout->is_registration_requir
                 </section>
 
                 <aside class="fls-checkout-sidebar">
+                    <?php do_action( 'floorista_before_checkout_totals' ); ?>
                     <?= $flow->get_order_details_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
                 </aside>
             </div>
