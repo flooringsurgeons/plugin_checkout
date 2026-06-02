@@ -3,6 +3,7 @@ defined( 'ABSPATH' ) || exit;
 
 class FLS_Checkout_Flow {
 	private static $instance = null;
+	private $suppress_new_account_email = false;
 
 	public static function init() {
 		if ( null === self::$instance ) {
@@ -60,6 +61,12 @@ class FLS_Checkout_Flow {
 		add_action( 'woocommerce_checkout_before_terms_and_conditions', array( $this, 'render_payment_email_opt_in' ) );
 		add_filter( 'woocommerce_get_privacy_policy_text', array( $this, 'custom_checkout_privacy_policy_text' ), 10, 2 );
 		add_filter( 'woocommerce_get_terms_and_conditions_checkbox_text', array( $this, 'custom_terms_checkbox_text' ) );
+
+		add_action( 'wp_ajax_nopriv_fls_check_email_account', array( $this, 'ajax_check_email_account' ) );
+		add_action( 'wp_ajax_fls_check_email_account', array( $this, 'ajax_check_email_account' ) );
+		add_action( 'woocommerce_checkout_order_processed', array( $this, 'maybe_create_account_on_checkout' ), 10, 3 );
+		add_action( 'woocommerce_email_after_order_table', array( $this, 'maybe_add_account_info_to_email' ), 10, 4 );
+		add_filter( 'woocommerce_email_enabled_customer_new_account', array( $this, 'maybe_suppress_new_account_email_filter' ) );
 	}
 
 	public function handle_post_price_settings_save() {
@@ -168,7 +175,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/css/checkout.css',
 			array( 'fls-checkout-flow-flatpickr' ),
-			'2.8.30'
+			'2.9.12'
 		);
 
 		wp_enqueue_script(
@@ -183,7 +190,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/js/checkout.js',
 			array( 'jquery', 'wc-checkout', 'fls-checkout-flow-flatpickr' ),
-			'2.8.18',
+			'2.8.19',
 			true
 		);
 
@@ -218,6 +225,9 @@ class FLS_Checkout_Flow {
 				'shipping'   => array(
 					'calcNonce' => wp_create_nonce( 'fls-calculate-shipping' ),
 					'ajaxUrl'   => admin_url( 'admin-ajax.php' ),
+				),
+				'account'    => array(
+					'checkNonce' => wp_create_nonce( 'fls-check-email-account' ),
 				),
 				'i18n'       => array(
 					'stepOneError'          => __( 'Please complete the required customer details before continuing.', 'fls-checkout-flow' ),
@@ -957,7 +967,11 @@ class FLS_Checkout_Flow {
 
 				<?php if ( ! empty( $pickup_rates ) ) : ?>
                     <button type="button" class="fls-delivery-method__tab<?php echo 'pickup' === $active_mode ? ' is-active' : ''; ?>" data-fls-delivery-tab="pickup" role="tab" aria-selected="<?php echo 'pickup' === $active_mode ? 'true' : 'false'; ?>">
-                        <span aria-hidden="true">🚶</span>
+                        <span><svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M6.7168 5.84586C6.7168 7.1645 7.78063 8.23761 9.09519 8.25613H9.16297C10.4773 8.23784 11.5414 7.1645 11.5414 5.84586C11.5414 4.51597 10.4592 3.43372 9.12896 3.43372C7.79869 3.43372 6.7168 4.51573 6.7168 5.84586ZM16.0003 11.7883H14.2852V13.2228C14.2852 13.285 14.2604 13.3446 14.2165 13.3886C14.1725 13.4326 14.1128 13.4573 14.0506 13.4573H12.8531C12.7909 13.4573 12.7312 13.4326 12.6873 13.3886C12.6433 13.3446 12.6186 13.285 12.6186 13.2228V11.7883H10.9034V16.5661H16.0003V11.7883Z" fill="currentColor"/>
+                            <path d="M9.87738 8.72473H9.16393C9.15244 8.72473 9.14142 8.72637 9.12992 8.72637C9.11843 8.72637 9.10741 8.72473 9.09592 8.72473H8.38247C7.77577 8.72572 7.17584 8.85231 6.62047 9.09653C6.0651 9.34075 5.56632 9.6973 5.15554 10.1437C4.41091 10.9515 3.99842 12.0103 4.00047 13.1089V14.616L4 14.6184V15.6373C4.00025 15.8836 4.09817 16.1196 4.27228 16.2938C4.4464 16.4679 4.68248 16.5659 4.92875 16.5662H9.50611C10.0183 16.5662 10.4351 16.1495 10.4351 15.6373C10.4351 15.1251 10.0183 14.7087 9.50611 14.7087H6.49941C6.32748 14.7085 6.16264 14.6401 6.04107 14.5185C5.9195 14.397 5.85111 14.2322 5.85093 14.0602V12.3884C5.85093 12.3262 5.87564 12.2666 5.91962 12.2226C5.9636 12.1786 6.02326 12.1539 6.08546 12.1539C6.14766 12.1539 6.20732 12.1786 6.2513 12.2226C6.29528 12.2666 6.31999 12.3262 6.31999 12.3884V14.0602C6.31999 14.159 6.40044 14.2396 6.49941 14.2396H9.50611C9.84908 14.2397 10.1799 14.3665 10.4351 14.5956V11.5538C10.4351 11.4916 10.4598 11.432 10.5038 11.388C10.5478 11.344 10.6074 11.3193 10.6696 11.3193H13.8752C13.6843 10.8881 13.424 10.4911 13.1045 10.1442C12.6937 9.69765 12.1949 9.341 11.6394 9.09674C11.084 8.85248 10.4839 8.72589 9.87714 8.72497L9.87738 8.72473Z" fill="currentColor"/>
+                            <path d="M13.0879 11.7886H13.8163V12.9886H13.0879V11.7886Z" fill="currentColor"/>
+                        </svg></span>
                         <span><?php esc_html_e( 'Pickup', 'fls-checkout-flow' ); ?></span>
                     </button>
 				<?php endif; ?>
@@ -1205,6 +1219,10 @@ class FLS_Checkout_Flow {
 
 		if ( ! empty( $_POST['fls_delivery_date'] ) ) {
 			$order->update_meta_data( '_fls_delivery_date', sanitize_text_field( wp_unslash( $_POST['fls_delivery_date'] ) ) );
+		}
+
+		if ( ! is_user_logged_in() ) {
+			$order->update_meta_data( '_fls_create_account', ! empty( $_POST['fls_create_account'] ) ? 1 : 0 );
 		}
 
 		$vat_data = $this->get_manual_vat_breakdown_data();
@@ -1922,6 +1940,184 @@ class FLS_Checkout_Flow {
 
 		if ( isset( $pack_data['total'] ) && null !== $pack_data['total'] ) {
 			$item->add_meta_data( '_fls_room_size', wc_format_decimal( (float) $pack_data['total'], 2 ), true );
+		}
+	}
+
+	/* -------------------------------------------------------
+	 * Account management
+	 * ------------------------------------------------------- */
+
+	public function ajax_check_email_account() {
+		check_ajax_referer( 'fls-check-email-account', 'nonce' );
+
+		if ( is_user_logged_in() ) {
+			wp_send_json_success( array( 'status' => 'logged_in' ) );
+			return;
+		}
+
+		$email = isset( $_POST['email'] ) ? sanitize_email( wp_unslash( $_POST['email'] ) ) : '';
+
+		if ( empty( $email ) || ! is_email( $email ) ) {
+			wp_send_json_error( array( 'status' => 'invalid_email' ) );
+			return;
+		}
+
+		if ( email_exists( $email ) ) {
+			wp_send_json_success(
+				array(
+					'status'    => 'existing_account',
+					'login_url' => $this->get_checkout_account_url(),
+				)
+			);
+		} else {
+			wp_send_json_success( array( 'status' => 'new_account' ) );
+		}
+	}
+
+	public function maybe_suppress_new_account_email_filter( $enabled ) {
+		return $this->suppress_new_account_email ? false : $enabled;
+	}
+
+	public function maybe_create_account_on_checkout( $order_id, $posted_data, $order ) {
+		try {
+			$this->do_create_account_on_checkout( $order_id, $order );
+		} catch ( Exception $e ) {
+			$this->suppress_new_account_email = false;
+		}
+	}
+
+	private function do_create_account_on_checkout( $order_id, $order ) {
+		if ( is_user_logged_in() ) {
+			return;
+		}
+
+		if ( ! ( $order instanceof WC_Abstract_Order ) ) {
+			$order = wc_get_order( $order_id );
+		}
+
+		if ( ! $order ) {
+			return;
+		}
+
+		if ( $order->get_meta( '_fls_account_created' ) ) {
+			return;
+		}
+
+		if ( $order->get_user_id() ) {
+			return;
+		}
+
+		if ( ! (int) $order->get_meta( '_fls_create_account' ) ) {
+			return;
+		}
+
+		$email = $order->get_billing_email();
+
+		if ( empty( $email ) || ! is_email( $email ) || email_exists( $email ) ) {
+			return;
+		}
+
+		$username = function_exists( 'wc_create_new_customer_username' )
+			? wc_create_new_customer_username( $email )
+			: sanitize_user( current( explode( '@', $email ) ), true );
+
+		if ( username_exists( $username ) ) {
+			$username = $username . '_' . time();
+		}
+
+		$this->suppress_new_account_email = true;
+		$user_id = wc_create_new_customer( $email, $username, wp_generate_password( 12, false ) );
+		$this->suppress_new_account_email = false;
+
+		if ( is_wp_error( $user_id ) ) {
+			return;
+		}
+
+		$order->set_customer_id( $user_id );
+
+		$user      = get_user_by( 'id', $user_id );
+		$reset_url = '';
+
+		if ( $user ) {
+			$reset_key = get_password_reset_key( $user );
+
+			if ( ! is_wp_error( $reset_key ) ) {
+				$reset_url = add_query_arg(
+					array(
+						'action' => 'rp',
+						'key'    => $reset_key,
+						'login'  => rawurlencode( $user->user_login ),
+					),
+					function_exists( 'wc_get_page_permalink' )
+						? wc_get_page_permalink( 'myaccount' ) . 'lost-password/'
+						: wp_login_url()
+				);
+			}
+		}
+
+		$order->update_meta_data( '_fls_account_created', 1 );
+		$order->update_meta_data( '_fls_new_account_email', $email );
+		$order->update_meta_data( '_fls_new_account_username', $username );
+		$order->update_meta_data( '_fls_new_account_reset_url', $reset_url );
+		$order->save();
+	}
+
+	public function maybe_add_account_info_to_email( $order, $sent_to_admin, $plain_text, $email_object ) {
+		if ( $sent_to_admin ) {
+			return;
+		}
+
+		$email_id = isset( $email_object->id ) ? $email_object->id : '';
+		if ( ! in_array( $email_id, array( 'customer_processing_order', 'customer_completed_order', 'customer_on_hold_order' ), true ) ) {
+			return;
+		}
+
+		if ( ! $order->get_meta( '_fls_account_created' ) ) {
+			return;
+		}
+
+		$account_email    = $order->get_meta( '_fls_new_account_email' );
+		$account_username = $order->get_meta( '_fls_new_account_username' );
+		$reset_url        = $order->get_meta( '_fls_new_account_reset_url' );
+
+		if ( empty( $account_email ) ) {
+			return;
+		}
+
+		if ( $plain_text ) {
+			echo "\n\n" . esc_html__( '--- Your Account Details ---', 'fls-checkout-flow' ) . "\n";
+			/* translators: %s: account email address */
+			echo esc_html( sprintf( __( 'Email: %s', 'fls-checkout-flow' ), $account_email ) ) . "\n";
+			/* translators: %s: account username */
+			echo esc_html( sprintf( __( 'Username: %s', 'fls-checkout-flow' ), $account_username ) ) . "\n";
+			if ( $reset_url ) {
+				/* translators: %s: password set URL */
+				echo esc_html( sprintf( __( 'Set your password: %s', 'fls-checkout-flow' ), $reset_url ) ) . "\n";
+			}
+		} else {
+			?>
+			<div style="margin-top:24px;padding:16px 20px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;">
+				<h3 style="margin:0 0 8px;font-size:15px;font-weight:700;color:#1e3a5f;"><?php esc_html_e( 'Your Account Has Been Created', 'fls-checkout-flow' ); ?></h3>
+				<p style="margin:0 0 10px;font-size:13px;color:#374151;"><?php esc_html_e( 'To track your order, submit warranty or damage requests, and access your purchase history:', 'fls-checkout-flow' ); ?></p>
+				<table style="font-size:13px;color:#374151;border-collapse:collapse;">
+					<tr>
+						<td style="padding:3px 12px 3px 0;font-weight:600;"><?php esc_html_e( 'Email:', 'fls-checkout-flow' ); ?></td>
+						<td style="padding:3px 0;"><?php echo esc_html( $account_email ); ?></td>
+					</tr>
+					<tr>
+						<td style="padding:3px 12px 3px 0;font-weight:600;"><?php esc_html_e( 'Username:', 'fls-checkout-flow' ); ?></td>
+						<td style="padding:3px 0;"><?php echo esc_html( $account_username ); ?></td>
+					</tr>
+				</table>
+				<?php if ( $reset_url ) : ?>
+					<p style="margin:14px 0 0;">
+						<a href="<?php echo esc_url( $reset_url ); ?>" style="display:inline-block;padding:10px 20px;background:#389382;color:#ffffff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600;">
+							<?php esc_html_e( 'Set Your Password', 'fls-checkout-flow' ); ?>
+						</a>
+					</p>
+				<?php endif; ?>
+			</div>
+			<?php
 		}
 	}
 }

@@ -732,6 +732,78 @@
         }
     };
 
+    // -- Account check ----------------------------------------------------------
+
+    const AccountCheck = {
+        lastCheckedEmail: '',
+
+        check(email) {
+            const cfg = Config.get('account', {});
+            const nonce = cfg.checkNonce || '';
+            const ajaxUrl = Config.shippingAjaxUrl();
+
+            if (!email || !nonce || !ajaxUrl || email === this.lastCheckedEmail) return;
+            this.lastCheckedEmail = email;
+
+            $.ajax({
+                type: 'POST',
+                url: ajaxUrl,
+                data: { action: 'fls_check_email_account', nonce: nonce, email: email }
+            }).done(function (response) {
+                if (response && response.success && response.data) {
+                    AccountCheck.updateUI(response.data);
+                }
+            });
+        },
+
+        updateUI(data) {
+            const $section = $('[data-fls-account-section]');
+            if (!$section.length) return;
+
+            const status = data.status || '';
+
+            if (status === 'logged_in') {
+                $section.hide();
+                return;
+            }
+
+            const $text = $section.find('[data-fls-account-text]');
+            const $toggle = $section.find('[data-fls-account-toggle]');
+
+            if (status === 'existing_account') {
+                const loginUrl = data.login_url || '#';
+                const $loginBtn = $('<a></a>')
+                    .attr('href', loginUrl)
+                    .addClass('fls-account-login-btn')
+                    .text('Login to Your Account');
+                $text.empty()
+                    .append(document.createTextNode('You already have an account with us. To track your order, submit warranty or damage requests, and access your purchase history after checkout, please sign in to your account.'))
+                    .append($loginBtn);
+                $toggle.prop('checked', true).prop('disabled', false);
+            } else if (status === 'new_account') {
+                $text.text(
+                    'To track your order and access warranty or damage requests after purchase, you need an account. '
+                    + 'We will automatically create one for you after checkout and send your login details by email. '
+                    + 'If you do not want us to create an account, please uncheck the option below.'
+                );
+                $toggle.prop('checked', true).prop('disabled', false);
+            } else {
+                return;
+            }
+
+            $section.stop(true, true).slideDown(200);
+        },
+
+        bind() {
+            $(document)
+                .off('blur.flsAccountCheck')
+                .on('blur.flsAccountCheck', '#billing_email', function () {
+                    const email = $.trim($(this).val() || '');
+                    if (email) AccountCheck.check(email);
+                });
+        }
+    };
+
     // -- Payment ----------------------------------------------------------------
 
     const Payment = {
@@ -979,6 +1051,7 @@
             this.bindDatePicker();
             this.bindFieldWatchers();
             Payment.bind();
+            AccountCheck.bind();
         }
     };
 
@@ -1009,6 +1082,9 @@
         Steps.go(Steps.active(), { immediate: !!immediate });
         Toast.position();
         Payment.sync();
+
+        const prefilled = $.trim($('#billing_email').val() || '');
+        if (prefilled) AccountCheck.check(prefilled);
     }
 
     $(window)

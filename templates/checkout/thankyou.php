@@ -39,24 +39,63 @@ if ( empty( $shipping_address_1 ) ) {
 
 $items          = $order->get_items( 'line_item' );
 $shipping_total = (float) $order->get_shipping_total() + (float) $order->get_shipping_tax();
+$is_failed      = $order->has_status( array( 'failed', 'cancelled' ) );
 
 do_action( 'woocommerce_before_thankyou', $order_id );
 ?>
 
     <div class="fls-thankyou">
         <div class="fls-thankyou__hero">
-            <div class="fls-thankyou__icon">
-                <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect width="48" height="48" rx="24" fill="#2F9B57"/>
-                    <path d="M33.3337 17L20.5003 29.8333L14.667 24" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-            </div>
 
-            <h1 class="fls-thankyou__title"><?php esc_html_e( 'Thank you for your purchase!', 'fls-checkout-flow' ); ?></h1>
-            <p class="fls-thankyou__subtitle"><?php esc_html_e( 'Your order has been successfully processed.', 'fls-checkout-flow' ); ?></p>
-            <p class="fls-thankyou__meta">
-				<?php echo esc_html( sprintf( __( 'Order #%1$s · %2$s', 'fls-checkout-flow' ), $order_number, $order_date ) ); ?>
-            </p>
+		    <?php if ( $is_failed ) : ?>
+
+                <div class="fls-thankyou__icon fls-thankyou__icon--error">
+                    <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <g clip-path="url(#clip0_fls_error)">
+                            <path d="M13.9999 25.6666C20.4432 25.6666 25.6666 20.4432 25.6666 13.9999C25.6666 7.5566 20.4432 2.33325 13.9999 2.33325C7.5566 2.33325 2.33325 7.5566 2.33325 13.9999C2.33325 20.4432 7.5566 25.6666 13.9999 25.6666Z" stroke="white" stroke-width="2.91667" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M14 9.33325V13.9999" stroke="white" stroke-width="2.91667" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M14 18.6667H14.0117" stroke="white" stroke-width="2.91667" stroke-linecap="round" stroke-linejoin="round"/>
+                        </g>
+                        <defs>
+                            <clipPath id="clip0_fls_error">
+                                <rect width="28" height="28" fill="white"/>
+                            </clipPath>
+                        </defs>
+                    </svg>
+                </div>
+
+                <h1 class="fls-thankyou__title"><?php esc_html_e( 'Payment unsuccessful', 'fls-checkout-flow' ); ?></h1>
+                <p class="fls-thankyou__subtitle"><?php esc_html_e( 'Unfortunately your order could not be processed. Please try again or contact us for help.', 'fls-checkout-flow' ); ?></p>
+                <p class="fls-thankyou__meta">
+				    <?php echo esc_html( sprintf( __( 'Order #%1$s · %2$s', 'fls-checkout-flow' ), $order_number, $order_date ) ); ?>
+                </p>
+
+                <div class="fls-thankyou__actions">
+                    <a href="<?php echo esc_url( wc_get_checkout_url() ); ?>" class="fls-thankyou__btn fls-thankyou__btn--primary">
+				        <?php esc_html_e( 'Try again', 'fls-checkout-flow' ); ?>
+                    </a>
+                    <a href="mailto:support@flooringsurgeons.co.uk" class="fls-thankyou__btn fls-thankyou__btn--secondary">
+				        <?php esc_html_e( 'Contact support', 'fls-checkout-flow' ); ?>
+                    </a>
+                </div>
+
+	        <?php else : ?>
+
+                <div class="fls-thankyou__icon">
+                    <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="64" height="64" rx="32" fill="#2F9B57"/>
+                        <path d="M44.4449 22.6667L27.3337 39.7779L19.5559 32" stroke="white" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+
+                <h1 class="fls-thankyou__title"><?php esc_html_e( 'Thank you for your purchase!', 'fls-checkout-flow' ); ?></h1>
+                <p class="fls-thankyou__subtitle"><?php esc_html_e( 'Your order has been successfully processed.', 'fls-checkout-flow' ); ?></p>
+                <p class="fls-thankyou__meta">
+				    <?php echo esc_html( sprintf( __( 'Order #%1$s · %2$s', 'fls-checkout-flow' ), $order_number, $order_date ) ); ?>
+                </p>
+
+	        <?php endif; ?>
+
         </div>
 
         <div class="fls-thankyou__cards">
@@ -244,5 +283,4 @@ do_action( 'woocommerce_before_thankyou', $order_id );
     </div>
 
 <?php
-do_action( 'woocommerce_thankyou_' . $order->get_payment_method(), $order_id );
 do_action( 'woocommerce_thankyou', $order_id );

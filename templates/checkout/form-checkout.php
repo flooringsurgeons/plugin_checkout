@@ -117,6 +117,42 @@ if ( ! $checkout->is_registration_enabled() && $checkout->is_registration_requir
                                 <?php do_action( 'woocommerce_checkout_shipping' ); ?>
                             </div>
 
+                            <?php if ( ! is_user_logged_in() ) : ?>
+                            <div class="fls-account-section" data-fls-account-section style="display:none;">
+                                <h3 class="fls-account-section__title"><?php esc_html_e( 'Create an account to Support and Track your Orders', 'fls-checkout-flow' ); ?></h3>
+                                <div class="fls-account-box" data-fls-account-box>
+                                    <span class="fls-account-box__icon" aria-hidden="true">
+                                        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M18.0063 0H6.625C5.06869 0 3.8125 1.25625 3.8125 2.8125V29.1875C3.8125 30.7436 5.06869 32 6.625 32H25.375C26.9312 32 28.1875 30.7436 28.1875 29.1875V4.6875L18.0063 0Z" fill="url(#fls_acct_grad0)"/>
+                                            <path d="M12.25 26.3125C11.7323 26.3125 11.3125 26.7323 11.3125 27.25C11.3125 27.7677 11.7323 28.1875 12.25 28.1875C12.7677 28.1875 13.1875 27.7677 13.1875 27.25C13.1875 26.7323 12.7677 26.3125 12.25 26.3125ZM16 26.3125C15.4823 26.3125 15.0625 26.7323 15.0625 27.25C15.0625 27.7677 15.4823 28.1875 16 28.1875C16.5177 28.1875 16.9375 27.7677 16.9375 27.25C16.9375 26.7323 16.5177 26.3125 16 26.3125ZM19.75 26.3125C19.2323 26.3125 18.8125 26.7323 18.8125 27.25C18.8125 27.7677 19.2323 28.1875 19.75 28.1875C20.2677 28.1875 20.6875 27.7677 20.6875 27.25C20.6875 26.7323 20.2677 26.3125 19.75 26.3125ZM18.8125 8.5C18.8125 6.94913 17.5509 5.6875 16 5.6875C14.4491 5.6875 13.1875 6.94913 13.1875 8.5C13.1875 10.0509 14.4491 11.3125 16 11.3125C17.5509 11.3125 18.8125 10.0509 18.8125 8.5ZM12.25 16.9375H19.75C20.2682 16.9375 20.6875 16.5182 20.6875 16V14.125C20.6875 12.5741 19.4259 11.3125 17.875 11.3125H16H14.125C12.5741 11.3125 11.3125 12.5741 11.3125 14.125V16C11.3125 16.5182 11.7318 16.9375 12.25 16.9375ZM21.625 18.8125H10.375C8.82413 18.8125 7.5625 20.0741 7.5625 21.625C7.5625 23.1759 8.82413 24.4375 10.375 24.4375H21.625C23.1759 24.4375 24.4375 23.1759 24.4375 21.625C24.4375 20.0741 23.1759 18.8125 21.625 18.8125ZM25.375 0H18.0063C17.3875 2.49362 19.2437 4.6875 21.625 4.6875H28.1875V2.8125C28.1875 1.25625 26.9312 0 25.375 0Z" fill="url(#fls_acct_grad1)"/>
+                                            <defs>
+                                                <linearGradient id="fls_acct_grad0" x1="16" y1="32" x2="16" y2="0" gradientUnits="userSpaceOnUse">
+                                                    <stop stop-color="#5558FF"/>
+                                                    <stop offset="1" stop-color="#00C0FF"/>
+                                                </linearGradient>
+                                                <linearGradient id="fls_acct_grad1" x1="17.875" y1="28.1875" x2="17.875" y2="0" gradientUnits="userSpaceOnUse">
+                                                    <stop stop-color="#ADDCFF"/>
+                                                    <stop offset="0.5028" stop-color="#EAF6FF"/>
+                                                    <stop offset="1" stop-color="#EAF6FF"/>
+                                                </linearGradient>
+                                            </defs>
+                                        </svg>
+                                    </span>
+                                    <span class="fls-account-box__text" data-fls-account-text></span>
+                                    <label class="fls-toggle fls-account-box__toggle" aria-label="<?php esc_attr_e( 'Account creation option', 'fls-checkout-flow' ); ?>">
+                                        <input type="checkbox" class="fls-toggle__input" name="fls_create_account" value="1" checked data-fls-account-toggle />
+                                        <span class="fls-toggle__slider">
+                                            <span class="fls-toggle__knob">
+                                                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                                    <path d="M2 6L4.5 8.5L10 3" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                                </svg>
+                                            </span>
+                                        </span>
+                                    </label>
+                                </div>
+                            </div>
+                            <?php endif; ?>
+
                             <div class="fls-checkout-step__actions">
                                 <button type="button" class="fls-checkout-step__button" data-fls-step-next="2" disabled><?php esc_html_e( 'Continue to Shipping', 'fls-checkout-flow' ); ?></button>
                             </div>
