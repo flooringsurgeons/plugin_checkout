@@ -44,5 +44,21 @@ get_header( 'noheader' );
 			<?php do_action( 'fls_checkout_page_after_content' ); ?>
         </div>
     </main>
+
+    <div class="fls-checkout-mobile-total-bar" id="fls-mobile-total-bar">
+        <div class="fls-checkout-mobile-total-bar__label">
+            <strong><?php esc_html_e( 'Order Total', 'fls-checkout-flow' ); ?></strong>
+            <span class="fls-checkout-mobile-total-bar__vat"><?php esc_html_e( '(incl. VAT)', 'fls-checkout-flow' ); ?></span>
+        </div>
+        <div class="fls-checkout-mobile-total-bar__right">
+            <button type="button" class="fls-checkout-mobile-total-bar__view-btn" data-fls-mobile-view-details>
+                <?php esc_html_e( 'View Details', 'fls-checkout-flow' ); ?>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+            <span class="fls-checkout-mobile-total-bar__amount" data-fls-mobile-total aria-live="polite"></span>
+        </div>
+    </div>
 <?php
 get_footer( 'nofooter' );

@@ -176,7 +176,9 @@
             if (!$stack.length) return;
 
             if (window.matchMedia('(max-width: 991px)').matches) {
-                $stack.css({ top: 'auto', bottom: '12px', left: '12px', right: '12px', width: 'auto', maxWidth: 'none' });
+                const barH = $('#fls-mobile-total-bar').outerHeight(true) || 0;
+                const bottom = (barH > 0 ? barH + 8 : 12) + 'px';
+                $stack.css({ top: 'auto', bottom: bottom, left: '12px', right: '12px', width: 'auto', maxWidth: 'none' });
                 return;
             }
 
@@ -941,6 +943,54 @@
         }
     };
 
+    // -- Mobile Total Bar -------------------------------------------------------
+
+    const MobileTotalBar = {
+        _observer: null,
+
+        syncTotal() {
+            const $amount = $('[data-fls-mobile-total]');
+            if (!$amount.length) return;
+            const $price = $('#fls-checkout-order-details .fls-order-details__row--total .fls-order-details__row strong').first();
+            if ($price.length) {
+                $amount.html($price.html());
+            }
+        },
+
+        _observeDetails() {
+            if (this._observer) {
+                this._observer.disconnect();
+                this._observer = null;
+            }
+            const target = document.getElementById('fls-checkout-order-details');
+            const bar = document.getElementById('fls-mobile-total-bar');
+            if (!target || !bar) return;
+
+            this._observer = new IntersectionObserver(function (entries) {
+                const visible = entries[0].isIntersecting;
+                bar.classList.toggle('is-hidden', visible);
+            }, { threshold: 0.1 });
+
+            this._observer.observe(target);
+        },
+
+        bind() {
+            $(document)
+                .off('click.flsMobileTotalBar')
+                .on('click.flsMobileTotalBar', '[data-fls-mobile-view-details]', function () {
+                    const $target = $('#fls-checkout-order-details');
+                    if (!$target.length) return;
+                    $('html, body').animate({ scrollTop: $target.offset().top - 16 }, 300);
+                });
+        },
+
+        init() {
+            this.bind();
+            this.syncTotal();
+            this._observeDetails();
+        }
+    };
+
     // -- Events -----------------------------------------------------------------
 
     const Events = {
@@ -1082,6 +1132,7 @@
         Steps.go(Steps.active(), { immediate: !!immediate });
         Toast.position();
         Payment.sync();
+        MobileTotalBar.init();
 
         const prefilled = $.trim($('#billing_email').val() || '');
         if (prefilled) AccountCheck.check(prefilled);
