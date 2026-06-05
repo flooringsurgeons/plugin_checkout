@@ -72,6 +72,7 @@ class FLS_Checkout_Flow {
 		add_action( 'woocommerce_email_after_order_table', array( $this, 'maybe_add_account_info_to_email' ), 10, 4 );
 		add_filter( 'woocommerce_email_enabled_customer_new_account', array( $this, 'maybe_suppress_new_account_email_filter' ) );
 		add_filter( 'woocommerce_order_received_verify_known_shoppers', array( $this, 'maybe_skip_order_received_verify' ) );
+		add_action( 'woocommerce_order_status_failed', array( $this, 'maybe_send_account_email_on_failed_order' ), 10, 2 );
 	}
 
 	public function handle_post_price_settings_save() {
@@ -2153,6 +2154,81 @@ class FLS_Checkout_Flow {
 		return $verify;
 	}
 
+	public function maybe_send_account_email_on_failed_order( $order_id, $order ) {
+		if ( ! ( $order instanceof WC_Abstract_Order ) ) {
+			$order = wc_get_order( $order_id );
+		}
+
+		if ( ! $order ) {
+			return;
+		}
+
+		if ( ! (int) $order->get_meta( '_fls_account_created' ) ) {
+			return;
+		}
+
+		if ( (int) $order->get_meta( '_fls_account_email_sent' ) ) {
+			return;
+		}
+
+		$account_email    = $order->get_meta( '_fls_new_account_email' );
+		$account_username = $order->get_meta( '_fls_new_account_username' );
+		$reset_url        = $order->get_meta( '_fls_new_account_reset_url' );
+
+		if ( empty( $account_email ) ) {
+			return;
+		}
+
+		$site_name = wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES );
+		/* translators: %s: site name */
+		$subject = sprintf( __( 'Your %s account details', 'fls-checkout-flow' ), $site_name );
+
+		ob_start();
+		?>
+		<div style="margin:0;padding:32px 0;background:#f3f4f6;font-family:sans-serif;">
+			<table width="100%" cellpadding="0" cellspacing="0">
+				<tr>
+					<td align="center">
+						<table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;max-width:560px;width:100%;">
+							<tr>
+								<td style="padding:32px;">
+									<h2 style="margin:0 0 12px;font-size:20px;font-weight:700;color:#111827;"><?php esc_html_e( 'Your account has been created', 'fls-checkout-flow' ); ?></h2>
+									<p style="margin:0 0 20px;font-size:14px;color:#374151;"><?php esc_html_e( 'We created an account for you so you can track your orders and manage your purchases.', 'fls-checkout-flow' ); ?></p>
+									<div style="padding:16px 20px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;">
+										<table style="font-size:13px;color:#374151;border-collapse:collapse;width:100%;">
+											<tr>
+												<td style="padding:3px 12px 3px 0;font-weight:600;"><?php esc_html_e( 'Email:', 'fls-checkout-flow' ); ?></td>
+												<td style="padding:3px 0;"><?php echo esc_html( $account_email ); ?></td>
+											</tr>
+											<tr>
+												<td style="padding:3px 12px 3px 0;font-weight:600;"><?php esc_html_e( 'Username:', 'fls-checkout-flow' ); ?></td>
+												<td style="padding:3px 0;"><?php echo esc_html( $account_username ); ?></td>
+											</tr>
+										</table>
+										<?php if ( $reset_url ) : ?>
+											<p style="margin:14px 0 0;">
+												<a href="<?php echo esc_url( $reset_url ); ?>" style="display:inline-block;padding:10px 20px;background:#389382;color:#ffffff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600;">
+													<?php esc_html_e( 'Set Your Password', 'fls-checkout-flow' ); ?>
+												</a>
+											</p>
+										<?php endif; ?>
+									</div>
+								</td>
+							</tr>
+						</table>
+					</td>
+				</tr>
+			</table>
+		</div>
+		<?php
+		$message = ob_get_clean();
+
+		wp_mail( $account_email, $subject, $message, array( 'Content-Type: text/html; charset=UTF-8' ) );
+
+		$order->update_meta_data( '_fls_account_email_sent', 1 );
+		$order->save();
+	}
+
 	public function maybe_add_account_info_to_email( $order, $sent_to_admin, $plain_text, $email_object ) {
 		if ( $sent_to_admin ) {
 			return;
@@ -2172,6 +2248,10 @@ class FLS_Checkout_Flow {
 		$reset_url        = $order->get_meta( '_fls_new_account_reset_url' );
 
 		if ( empty( $account_email ) ) {
+			return;
+		}
+
+		if ( (int) $order->get_meta( '_fls_account_email_sent' ) ) {
 			return;
 		}
 
@@ -2210,5 +2290,8 @@ class FLS_Checkout_Flow {
 			</div>
 			<?php
 		}
+
+		$order->update_meta_data( '_fls_account_email_sent', 1 );
+		$order->save();
 	}
 }
