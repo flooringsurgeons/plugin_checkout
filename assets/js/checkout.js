@@ -991,6 +991,317 @@
         }
     };
 
+    // -- Checkout Draft ---------------------------------------------------------
+
+    const CheckoutDraft = {
+        _restored: false,
+        _storageKey: 'fls_checkout_draft',
+        _orderSubmitting: false,
+        _pageEventsAdded: false,
+        _cache: {},        // values captured via events or polling
+        _pollTimer: null,
+        _pendingDraft: null,  // draft kept for re-apply after WooCommerce wipes form on updated_checkout
+
+        // Poll DOM every 500 ms — the ONLY reliable way to catch Chrome address
+        // autofill which commits element.value asynchronously after filling.
+        _startPolling() {
+            if (this._pollTimer) return;
+            const self = this;
+            let _lastCacheSize = 0;
+            this._pollTimer = setInterval(function () {
+                const step = document.querySelector('[data-fls-step="1"]');
+                if (!step) return;
+                step.querySelectorAll('input, select, textarea').forEach(function (el) {
+                    if (!el.name || !el.value || el.type === 'radio' ||
+                        el.type === 'hidden' || el.type === 'submit' || el.type === 'button') return;
+                    self._cache[el.name] = el.value;
+                });
+                const cb = document.getElementById('ship-to-different-address-checkbox');
+                if (cb) self._cache['ship_to_different_address'] = cb.checked ? '1' : '0';
+
+                const cacheSize = Object.keys(self._cache).filter(function (k) { return !!self._cache[k]; }).length;
+                if (cacheSize !== _lastCacheSize) {
+                    console.log('[FLS Draft] poll tick: cache grew from', _lastCacheSize, '→', cacheSize, 'fields | keys:', Object.keys(self._cache).join(', '));
+                    _lastCacheSize = cacheSize;
+                }
+            }, 500);
+        },
+
+        _stopPolling() {
+            if (this._pollTimer) { clearInterval(this._pollTimer); this._pollTimer = null; }
+        },
+
+        // Read all step-1 field values directly from the DOM.
+        // Called at pagehide/beforeunload — at that moment the browser has
+        // committed ALL autofill values (Chrome, Firefox, Safari) to element.value.
+        _readFields(caller) {
+            const tag = caller ? '[FLS Draft] _readFields(' + caller + ')' : '[FLS Draft] _readFields';
+
+            // Snapshot cache BEFORE merging with DOM
+            const cacheSnapshot = Object.assign({}, this._cache);
+            const cacheKeys = Object.keys(cacheSnapshot).filter(function (k) { return !!cacheSnapshot[k]; });
+
+            // Start with values captured by polling/events (most reliable for autofill)
+            const fields = Object.assign({}, this._cache);
+
+            // Also do a live DOM scan — non-empty DOM value always wins
+            const domValues = {};
+            const step = document.querySelector('[data-fls-step="1"]');
+            if (!step) {
+                console.warn(tag + ': [data-fls-step="1"] not found in DOM');
+            } else {
+                step.querySelectorAll('input, select, textarea').forEach(function (el) {
+                    if (!el.name || el.type === 'radio' || el.type === 'submit' ||
+                        el.type === 'button' || el.type === 'hidden') return;
+                    const v = el.type === 'checkbox' ? (el.checked ? '1' : '0') : (el.value || '');
+                    if (v) { fields[el.name] = v; domValues[el.name] = v; }
+                });
+            }
+
+            const cb = document.getElementById('ship-to-different-address-checkbox');
+            if (cb) fields['ship_to_different_address'] = cb.checked ? '1' : '0';
+
+            const domKeys = Object.keys(domValues);
+            const mergedFilled = Object.keys(fields).filter(function (k) { return !!fields[k]; });
+
+            console.log(tag + ' — CACHE (' + cacheKeys.length + '):', cacheKeys.length ? JSON.stringify(cacheSnapshot) : 'EMPTY');
+            console.log(tag + ' — DOM   (' + domKeys.length + '):', domKeys.length ? JSON.stringify(domValues) : 'EMPTY');
+            console.log(tag + ' — MERGED(' + mergedFilled.length + '):', mergedFilled.length ? JSON.stringify(fields) : 'EMPTY');
+            return fields;
+        },
+
+        _hasValues(fields) {
+            if (!fields) return false;
+            return Object.keys(fields).some(function (k) {
+                return k !== 'ship_to_different_address' && !!fields[k];
+            });
+        },
+
+        _writeStorage(fields) {
+            if (!this._hasValues(fields)) {
+                console.warn('[FLS Draft] _writeStorage: skipped — no values to save. fields:', JSON.stringify(fields));
+                return;
+            }
+            try {
+                sessionStorage.setItem(this._storageKey, JSON.stringify(fields));
+                const filledKeys = Object.keys(fields).filter(function (k) { return !!fields[k]; });
+                console.log('[FLS Draft] _writeStorage: saved', filledKeys.length, 'fields to sessionStorage ✓ | data:', JSON.stringify(fields));
+            } catch (e) {
+                console.error('[FLS Draft] _writeStorage: sessionStorage FAILED:', e);
+            }
+        },
+
+        _clearStorage() {
+            try { sessionStorage.removeItem(this._storageKey); } catch (e) {}
+        },
+
+        // sendBeacon is guaranteed to complete even during page unload.
+        // Falls back to fire-and-forget AJAX when unavailable.
+        _serverSave(fields) {
+            if (!this._hasValues(fields)) return;
+            const cfg = Config.get('draft', {});
+            const nonce = cfg.saveNonce || '';
+            const ajaxUrl = Config.shippingAjaxUrl();
+            if (!nonce || !ajaxUrl) return;
+
+            if (typeof navigator.sendBeacon === 'function') {
+                const body = new URLSearchParams({ action: 'fls_save_checkout_draft', nonce: nonce });
+                Object.keys(fields).forEach(function (k) { body.append('fields[' + k + ']', fields[k]); });
+                navigator.sendBeacon(ajaxUrl, body);
+            } else {
+                $.ajax({ type: 'POST', url: ajaxUrl, data: { action: 'fls_save_checkout_draft', nonce: nonce, fields: fields } });
+            }
+        },
+
+        restore() {
+            console.log('[FLS Draft] restore() called, _restored:', this._restored);
+            if (this._restored) return;
+
+            const cfg = Config.get('draft', {});
+            let draft = (cfg.fields && this._hasValues(cfg.fields)) ? cfg.fields : null;
+            console.log('[FLS Draft] PHP session fields:', cfg.fields ? JSON.stringify(cfg.fields) : 'null');
+
+            if (!draft) {
+                try {
+                    const raw = sessionStorage.getItem(this._storageKey);
+                    console.log('[FLS Draft] sessionStorage raw:', raw || 'NULL');
+                    if (raw) draft = JSON.parse(raw);
+                } catch (e) {
+                    console.error('[FLS Draft] sessionStorage parse error:', e);
+                }
+            }
+
+            this._clearStorage();
+
+            if (!this._hasValues(draft)) {
+                console.warn('[FLS Draft] restore(): no valid draft found — nothing to restore');
+                return;
+            }
+            this._restored = true;
+            console.log('[FLS Draft] restore(): applying draft →', JSON.stringify(draft));
+
+            const stateFields = ['billing_state', 'shipping_state'];
+            let appliedCount = 0;
+
+            $.each(draft, function (name, value) {
+                if (name === 'ship_to_different_address' || stateFields.indexOf(name) !== -1) return;
+                const $input = $('[name="' + name + '"]').not(':radio');
+                if (!$input.length) { console.warn('[FLS Draft] restore(): field not found in DOM:', name); return; }
+                $input.is(':checkbox') ? $input.prop('checked', value === '1') : $input.val(value);
+                appliedCount++;
+            });
+            console.log('[FLS Draft] restore(): applied', appliedCount, 'fields to DOM');
+
+            // Keep draft so reapplyAfterUpdate() can refill fields after WooCommerce
+            // fires updated_checkout and replaces the form HTML (which wipes our values).
+            this._pendingDraft = draft;
+
+            $('[name="billing_country"], [name="shipping_country"]').trigger('change');
+
+            setTimeout(function () {
+                stateFields.forEach(function (name) {
+                    if (draft[name]) $('[name="' + name + '"]').val(draft[name]);
+                });
+
+                if (typeof draft['ship_to_different_address'] !== 'undefined') {
+                    const $cb = $('#ship-to-different-address-checkbox');
+                    if ($cb.length && $cb.is(':checked') !== (draft['ship_to_different_address'] === '1')) {
+                        $cb.prop('checked', draft['ship_to_different_address'] === '1').trigger('change');
+                    }
+                }
+
+                Validation.maybeDowngrade();
+                Steps.updateButtons();
+                Steps.syncUi(Steps.active(), true);
+            }, 150);
+        },
+
+        // Called from updated_checkout handler to re-fill fields that WooCommerce wiped.
+        // Does NOT trigger country change again (country is already correct) to avoid a loop.
+        reapplyAfterUpdate() {
+            const draft = this._pendingDraft;
+            if (!draft) return;
+            this._pendingDraft = null;
+            console.log('[FLS Draft] reapplyAfterUpdate(): re-filling', Object.keys(draft).length, 'fields after WooCommerce form reset');
+
+            const stateFields = ['billing_state', 'shipping_state'];
+            let appliedCount = 0;
+
+            $.each(draft, function (name, value) {
+                if (name === 'ship_to_different_address' || stateFields.indexOf(name) !== -1) return;
+                if (name === 'billing_country' || name === 'shipping_country') return;
+                const $input = $('[name="' + name + '"]').not(':radio');
+                if (!$input.length) return;
+                $input.is(':checkbox') ? $input.prop('checked', value === '1') : $input.val(value);
+                appliedCount++;
+            });
+            console.log('[FLS Draft] reapplyAfterUpdate(): applied', appliedCount, 'fields');
+
+            setTimeout(function () {
+                stateFields.forEach(function (name) {
+                    if (draft[name]) $('[name="' + name + '"]').val(draft[name]);
+                });
+
+                if (typeof draft['ship_to_different_address'] !== 'undefined') {
+                    const $cb = $('#ship-to-different-address-checkbox');
+                    if ($cb.length && $cb.is(':checked') !== (draft['ship_to_different_address'] === '1')) {
+                        $cb.prop('checked', draft['ship_to_different_address'] === '1').trigger('change');
+                    }
+                }
+
+                Validation.maybeDowngrade();
+                Steps.updateButtons();
+                Steps.syncUi(Steps.active(), true);
+            }, 100);
+        },
+
+        bind() {
+            const self = this;
+
+            if (!this._pageEventsAdded) {
+                this._pageEventsAdded = true;
+
+                // Polling: reads element.value every 500 ms — captures Chrome address
+                // autofill values the moment they are committed, before any user action.
+                this._startPolling();
+
+                // Native capture-phase listeners catch Chrome's synthetic autofill events.
+                document.addEventListener('input', function (e) {
+                    const el = e.target;
+                    if (!el || !el.name || !el.closest || !el.closest('[data-fls-step="1"]')) return;
+                    if (el.type === 'radio' || el.type === 'hidden') return;
+                    const v = el.type === 'checkbox' ? (el.checked ? '1' : '0') : (el.value || '');
+                    if (v) self._cache[el.name] = v;
+                }, true);
+
+                document.addEventListener('change', function (e) {
+                    const el = e.target;
+                    if (!el || !el.name || !el.closest || !el.closest('[data-fls-step="1"]')) return;
+                    if (el.type === 'radio' || el.type === 'hidden') return;
+                    const v = el.type === 'checkbox' ? (el.checked ? '1' : '0') : (el.value || '');
+                    if (v) self._cache[el.name] = v;
+                }, true);
+
+                window.addEventListener('pagehide', function () {
+                    self._stopPolling();
+                    if (self._orderSubmitting) return;
+                    console.log('[FLS Draft] pagehide fired — reading fields...');
+                    const fields = self._readFields('pagehide');
+                    const count = Object.values(fields).filter(function (v) { return !!v; }).length;
+                    console.log('[FLS Draft] pagehide → saving', count, 'fields to storage');
+                    self._writeStorage(fields);
+                    self._serverSave(fields);
+                });
+
+                window.addEventListener('beforeunload', function () {
+                    if (self._orderSubmitting) return;
+                    self._writeStorage(self._readFields('beforeunload'));
+                });
+            }
+
+            $(document.body)
+                .off('checkout_place_order.flsDraft')
+                .on('checkout_place_order.flsDraft', function () {
+                    self._orderSubmitting = true;
+                    self._stopPolling();
+                    self._clearStorage();
+                })
+                .off('checkout_error.flsDraft')
+                .on('checkout_error.flsDraft', function () {
+                    self._orderSubmitting = false;
+                    self._startPolling();
+                });
+
+            $(document)
+                .off('click.flsCheckoutDraft')
+                .on('click.flsCheckoutDraft', '.fls-account-login-btn, .fls-checkout-steps-nav__account', function (e) {
+                    if (e.ctrlKey || e.metaKey || e.shiftKey || e.which === 2) return;
+                    const href = $(this).attr('href');
+                    if (!href || href === '#') return;
+                    e.preventDefault();
+
+                    console.log('[FLS Draft] login click — cache size at click time:', Object.keys(self._cache).filter(function (k) { return !!self._cache[k]; }).length);
+
+                    // Pass 1: immediate read captures manually-typed values already in _cache.
+                    const quickFields = self._readFields('login-click-immediate');
+
+                    // Pass 2 (300 ms later): Chrome address-book autofill commits values to
+                    // element.value asynchronously. Without this delay, autofilled fields are
+                    // invisible to _readFields at click time even though they look filled on screen.
+                    setTimeout(function () {
+                        const delayedFields = self._readFields('login-click-delayed');
+                        // Merge: delayed DOM values win (more complete), quickFields fill any gaps.
+                        const merged = Object.assign({}, quickFields, delayedFields);
+                        const count = Object.keys(merged).filter(function (k) { return !!merged[k]; }).length;
+                        console.log('[FLS Draft] login click → merged', count, 'fields, navigating to:', href);
+                        self._writeStorage(merged);
+                        self._serverSave(merged);
+                        window.location.href = href;
+                    }, 300);
+                });
+        }
+    };
+
     // -- Events -----------------------------------------------------------------
 
     const Events = {
@@ -1102,6 +1413,7 @@
             this.bindFieldWatchers();
             Payment.bind();
             AccountCheck.bind();
+            CheckoutDraft.bind();
         }
     };
 
@@ -1125,6 +1437,7 @@
 
     function init(immediate) {
         Events.bindAll();
+        CheckoutDraft.restore();
         Address.syncChoiceUi();
         Address.syncShippingVisibility(!!immediate);
         initDeliveryState();
@@ -1151,6 +1464,8 @@
         } else {
             init(true);
         }
+        // Re-fill draft fields wiped by WooCommerce's form HTML replacement.
+        CheckoutDraft.reapplyAfterUpdate();
         if (State.get().deliveryAvailable === false) {
             Delivery.ensureBlockedUi();
         }

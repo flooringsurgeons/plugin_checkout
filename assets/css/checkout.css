@@ -2231,6 +2231,40 @@
     font-weight: 500;
 }
 
+.fls-thankyou__account-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    padding: 16px 20px;
+    font-size: 14px;
+    color: #1e40af;
+    max-width: 480px;
+    margin: 0 auto;
+}
+
+.fls-thankyou__account-notice svg {
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.fls-thankyou__account-notice p {
+    margin: 0;
+    line-height: 1.6;
+}
+
+.fls-thankyou__account-notice-link {
+    color: #1e40af;
+    font-weight: 600;
+    text-decoration: underline;
+}
+
+.fls-thankyou__account-notice-link:hover {
+    color: #1d4ed8;
+}
+
 @media (max-width: 599px) {
     .fls-thankyou-page {
         background: #f5f5f5;

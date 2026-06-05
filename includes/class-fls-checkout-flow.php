@@ -65,8 +65,13 @@ class FLS_Checkout_Flow {
 		add_action( 'wp_ajax_nopriv_fls_check_email_account', array( $this, 'ajax_check_email_account' ) );
 		add_action( 'wp_ajax_fls_check_email_account', array( $this, 'ajax_check_email_account' ) );
 		add_action( 'woocommerce_checkout_order_processed', array( $this, 'maybe_create_account_on_checkout' ), 10, 3 );
+
+		add_action( 'wp_ajax_nopriv_fls_save_checkout_draft', array( $this, 'ajax_save_checkout_draft' ) );
+		add_action( 'wp_ajax_fls_save_checkout_draft', array( $this, 'ajax_save_checkout_draft' ) );
+		add_action( 'woocommerce_checkout_order_processed', array( $this, 'clear_checkout_draft' ), 5, 3 );
 		add_action( 'woocommerce_email_after_order_table', array( $this, 'maybe_add_account_info_to_email' ), 10, 4 );
 		add_filter( 'woocommerce_email_enabled_customer_new_account', array( $this, 'maybe_suppress_new_account_email_filter' ) );
+		add_filter( 'woocommerce_order_received_verify_known_shoppers', array( $this, 'maybe_skip_order_received_verify' ) );
 	}
 
 	public function handle_post_price_settings_save() {
@@ -175,7 +180,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/css/checkout.css',
 			array( 'fls-checkout-flow-flatpickr' ),
-			'2.9.14'
+			'2.9.16'
 		);
 
 		wp_enqueue_script(
@@ -190,7 +195,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/js/checkout.js',
 			array( 'jquery', 'wc-checkout', 'fls-checkout-flow-flatpickr' ),
-			'2.8.21',
+			'2.8.30',
 			true
 		);
 
@@ -228,6 +233,10 @@ class FLS_Checkout_Flow {
 				),
 				'account'    => array(
 					'checkNonce' => wp_create_nonce( 'fls-check-email-account' ),
+				),
+				'draft'      => array(
+					'saveNonce' => wp_create_nonce( 'fls-save-checkout-draft' ),
+					'fields'    => $this->get_checkout_draft_for_js(),
 				),
 				'i18n'       => array(
 					'stepOneError'          => __( 'Please complete the required customer details before continuing.', 'fls-checkout-flow' ),
@@ -1352,6 +1361,68 @@ class FLS_Checkout_Flow {
 		return sprintf( __( 'I agree to the %s', 'fls-checkout-flow' ), $terms_link );
 	}
 
+	// -- Checkout Draft --------------------------------------------------------
+
+	public function ajax_save_checkout_draft() {
+		if ( ! check_ajax_referer( 'fls-save-checkout-draft', 'nonce', false ) ) {
+			wp_send_json_error( array( 'message' => 'Invalid nonce' ) );
+			return;
+		}
+
+		if ( ! WC()->session ) {
+			wp_send_json_error( array( 'message' => 'No session' ) );
+			return;
+		}
+
+		$allowed_fields = array(
+			'billing_first_name', 'billing_last_name', 'billing_email', 'billing_phone',
+			'billing_address_1', 'billing_city', 'billing_postcode', 'billing_country', 'billing_state',
+			'ship_to_different_address',
+			'shipping_first_name', 'shipping_last_name', 'shipping_address_1',
+			'shipping_city', 'shipping_postcode', 'shipping_country', 'shipping_state',
+		);
+
+		$raw   = isset( $_POST['fields'] ) && is_array( $_POST['fields'] ) ? wp_unslash( $_POST['fields'] ) : array();
+		$draft = array();
+
+		foreach ( $allowed_fields as $field ) {
+			if ( isset( $raw[ $field ] ) ) {
+				$draft[ $field ] = sanitize_text_field( $raw[ $field ] );
+			}
+		}
+
+		WC()->session->set( 'fls_checkout_draft', $draft );
+		WC()->session->set( 'fls_checkout_draft_pending', true );
+
+		wp_send_json_success();
+	}
+
+	private function get_checkout_draft_for_js() {
+		if ( ! WC()->session ) {
+			return null;
+		}
+
+		if ( ! WC()->session->get( 'fls_checkout_draft_pending' ) ) {
+			return null;
+		}
+
+		$draft = WC()->session->get( 'fls_checkout_draft' );
+
+		// One-shot: clear immediately so it never auto-fills on a future visit.
+		WC()->session->set( 'fls_checkout_draft_pending', false );
+		WC()->session->set( 'fls_checkout_draft', null );
+
+		return ( ! empty( $draft ) && is_array( $draft ) ) ? $draft : null;
+	}
+
+	public function clear_checkout_draft( $order_id, $posted_data, $order ) {
+		if ( ! WC()->session ) {
+			return;
+		}
+		WC()->session->set( 'fls_checkout_draft', null );
+		WC()->session->set( 'fls_checkout_draft_pending', false );
+	}
+
 	public function maybe_clear_shipping_session() {
 		if ( ! $this->should_override_checkout() ) {
 			return;
@@ -2060,6 +2131,26 @@ class FLS_Checkout_Flow {
 		$order->update_meta_data( '_fls_new_account_username', $username );
 		$order->update_meta_data( '_fls_new_account_reset_url', $reset_url );
 		$order->save();
+	}
+
+	public function maybe_skip_order_received_verify( $verify ) {
+		if ( ! $verify ) {
+			return $verify;
+		}
+
+		$order_id = absint( get_query_var( 'order-received' ) );
+
+		if ( ! $order_id ) {
+			return $verify;
+		}
+
+		$order = wc_get_order( $order_id );
+
+		if ( $order && (int) $order->get_meta( '_fls_account_created' ) === 1 ) {
+			return false;
+		}
+
+		return $verify;
 	}
 
 	public function maybe_add_account_info_to_email( $order, $sent_to_admin, $plain_text, $email_object ) {

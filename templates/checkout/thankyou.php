@@ -41,6 +41,15 @@ $items          = $order->get_items( 'line_item' );
 $shipping_total = (float) $order->get_shipping_total() + (float) $order->get_shipping_tax();
 $is_failed      = $order->has_status( array( 'failed', 'cancelled' ) );
 
+$account_created_for_guest = ! is_user_logged_in() && ! $is_failed && (int) $order->get_meta( '_fls_account_created' ) === 1;
+$login_url_for_thankyou    = '';
+
+if ( $account_created_for_guest ) {
+	$thankyou_url           = wc_get_endpoint_url( 'order-received', $order_id, wc_get_checkout_url() );
+	$thankyou_url           = add_query_arg( 'key', $order->get_order_key(), $thankyou_url );
+	$login_url_for_thankyou = add_query_arg( 'redirect_to', rawurlencode( $thankyou_url ), wc_get_page_permalink( 'myaccount' ) );
+}
+
 do_action( 'woocommerce_before_thankyou', $order_id );
 ?>
 
@@ -98,6 +107,25 @@ do_action( 'woocommerce_before_thankyou', $order_id );
 
         </div>
 
+        <?php if ( $account_created_for_guest ) : ?>
+        <div class="fls-thankyou__account-notice">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M10 18.3334C14.6024 18.3334 18.3334 14.6024 18.3334 10C18.3334 5.39765 14.6024 1.66669 10 1.66669C5.39765 1.66669 1.66669 5.39765 1.66669 10C1.66669 14.6024 5.39765 18.3334 10 18.3334Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M10 6.66669V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M10 13.3334H10.0083" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <p><?php
+                echo wp_kses(
+                    sprintf(
+                        /* translators: %s: Log in link */
+                        __( 'Your username and password have been emailed to you. %s to view more information.', 'fls-checkout-flow' ),
+                        '<a href="' . esc_url( $login_url_for_thankyou ) . '" class="fls-thankyou__account-notice-link">' . esc_html__( 'Log in', 'fls-checkout-flow' ) . '</a>'
+                    ),
+                    array( 'a' => array( 'href' => array(), 'class' => array() ) )
+                );
+            ?></p>
+        </div>
+        <?php else : ?>
         <div class="fls-thankyou__cards">
 
             <div class="fls-thankyou-card">
@@ -275,6 +303,7 @@ do_action( 'woocommerce_before_thankyou', $order_id );
             </div>
 
         </div>
+        <?php endif; ?>
 
         <div class="fls-thankyou__support">
 			<?php esc_html_e( 'Questions about your order?', 'fls-checkout-flow' ); ?>
@@ -283,4 +312,5 @@ do_action( 'woocommerce_before_thankyou', $order_id );
     </div>
 
 <?php
+do_action( 'woocommerce_thankyou_' . $order->get_payment_method(), $order_id );
 do_action( 'woocommerce_thankyou', $order_id );
