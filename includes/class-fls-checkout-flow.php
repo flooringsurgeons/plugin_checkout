@@ -592,6 +592,10 @@ class FLS_Checkout_Flow {
 				continue;
 			}
 
+			if ( ! empty( $cart_item['sample_product'] ) ) {
+				continue;
+			}
+
 			$regular = (float) $product->get_regular_price();
 			$current = (float) $product->get_price();
 
@@ -626,8 +630,12 @@ class FLS_Checkout_Flow {
 			$total += $product_discount;
 		}
 
+		if ( empty( WC()->cart->get_fees() ) ) {
+			WC()->cart->calculate_fees();
+		}
+
 		foreach ( WC()->cart->get_fees() as $fee ) {
-			$fee_total = isset( $fee->total ) ? (float) $fee->total : (float) $fee->amount;
+			$fee_total = ! empty( $fee->total ) ? (float) $fee->total : (float) $fee->amount;
 
 			if ( $fee_total < 0 ) {
 				$rows[] = array(
@@ -1862,9 +1870,17 @@ class FLS_Checkout_Flow {
 
 		$postcode = WC()->session->get( 'fls_calculated_shipping_postcode' );
 
-		// Only override once a postcode calculation has been performed.
+		// Before a postcode calculation has been performed, suppress all delivery
+		// rates so no shipping cost is added to the cart total. Keep only local
+		// pickup rates so that tab remains visible.
 		if ( empty( $postcode ) ) {
-			return $rates;
+			$pickup_rates = array();
+			foreach ( $rates as $rate_id => $rate ) {
+				if ( 'local_pickup' === $rate->get_method_id() ) {
+					$pickup_rates[ $rate_id ] = $rate;
+				}
+			}
+			return $pickup_rates;
 		}
 
 		$delivery_available = WC()->session->get( 'fls_delivery_available' );
