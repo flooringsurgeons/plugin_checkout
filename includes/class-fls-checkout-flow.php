@@ -2148,6 +2148,42 @@ class FLS_Checkout_Flow {
 		$order->update_meta_data( '_fls_new_account_username', $username );
 		$order->update_meta_data( '_fls_new_account_reset_url', $reset_url );
 		$order->save();
+
+		$this->send_new_account_email( $order, $email, $username, $reset_url );
+	}
+
+	private function send_new_account_email( $order, $account_email, $account_username, $reset_url ) {
+		$site_name = wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES );
+		/* translators: %s: site name */
+		$subject = sprintf( __( 'Your %s account details', 'fls-checkout-flow' ), $site_name );
+
+		$set_password_button = '';
+		if ( $reset_url ) {
+			$set_password_button = '<p style="margin:14px 0 0;"><a href="' . esc_url( $reset_url ) . '" style="display:inline-block;padding:10px 20px;background:#389382;color:#ffffff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600;">' . esc_html__( 'Set Your Password', 'fls-checkout-flow' ) . '</a></p>';
+		}
+
+		$message = '<div style="margin:0;padding:32px 0;background:#f3f4f6;font-family:sans-serif;">'
+			. '<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">'
+			. '<table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;max-width:560px;width:100%;">'
+			. '<tr><td style="padding:32px;">'
+			. '<h2 style="margin:0 0 12px;font-size:20px;font-weight:700;color:#111827;">' . esc_html__( 'Your account has been created', 'fls-checkout-flow' ) . '</h2>'
+			. '<p style="margin:0 0 20px;font-size:14px;color:#374151;">' . esc_html__( 'We created an account for you so you can track your orders and manage your purchases.', 'fls-checkout-flow' ) . '</p>'
+			. '<div style="padding:16px 20px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;">'
+			. '<table style="font-size:13px;color:#374151;border-collapse:collapse;width:100%;">'
+			. '<tr><td style="padding:3px 12px 3px 0;font-weight:600;">' . esc_html__( 'Email:', 'fls-checkout-flow' ) . '</td><td style="padding:3px 0;">' . esc_html( $account_email ) . '</td></tr>'
+			. '<tr><td style="padding:3px 12px 3px 0;font-weight:600;">' . esc_html__( 'Username:', 'fls-checkout-flow' ) . '</td><td style="padding:3px 0;">' . esc_html( $account_username ) . '</td></tr>'
+			. '</table>'
+			. $set_password_button
+			. '</div>'
+			. '</td></tr>'
+			. '</table>'
+			. '</td></tr></table>'
+			. '</div>';
+
+		wp_mail( $account_email, $subject, $message, array( 'Content-Type: text/html; charset=UTF-8' ) );
+
+		$order->update_meta_data( '_fls_account_email_sent', 1 );
+		$order->save();
 	}
 
 	public function maybe_skip_order_received_verify( $verify ) {
@@ -2195,54 +2231,7 @@ class FLS_Checkout_Flow {
 			return;
 		}
 
-		$site_name = wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES );
-		/* translators: %s: site name */
-		$subject = sprintf( __( 'Your %s account details', 'fls-checkout-flow' ), $site_name );
-
-		ob_start();
-		?>
-		<div style="margin:0;padding:32px 0;background:#f3f4f6;font-family:sans-serif;">
-			<table width="100%" cellpadding="0" cellspacing="0">
-				<tr>
-					<td align="center">
-						<table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;max-width:560px;width:100%;">
-							<tr>
-								<td style="padding:32px;">
-									<h2 style="margin:0 0 12px;font-size:20px;font-weight:700;color:#111827;"><?php esc_html_e( 'Your account has been created', 'fls-checkout-flow' ); ?></h2>
-									<p style="margin:0 0 20px;font-size:14px;color:#374151;"><?php esc_html_e( 'We created an account for you so you can track your orders and manage your purchases.', 'fls-checkout-flow' ); ?></p>
-									<div style="padding:16px 20px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;">
-										<table style="font-size:13px;color:#374151;border-collapse:collapse;width:100%;">
-											<tr>
-												<td style="padding:3px 12px 3px 0;font-weight:600;"><?php esc_html_e( 'Email:', 'fls-checkout-flow' ); ?></td>
-												<td style="padding:3px 0;"><?php echo esc_html( $account_email ); ?></td>
-											</tr>
-											<tr>
-												<td style="padding:3px 12px 3px 0;font-weight:600;"><?php esc_html_e( 'Username:', 'fls-checkout-flow' ); ?></td>
-												<td style="padding:3px 0;"><?php echo esc_html( $account_username ); ?></td>
-											</tr>
-										</table>
-										<?php if ( $reset_url ) : ?>
-											<p style="margin:14px 0 0;">
-												<a href="<?php echo esc_url( $reset_url ); ?>" style="display:inline-block;padding:10px 20px;background:#389382;color:#ffffff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600;">
-													<?php esc_html_e( 'Set Your Password', 'fls-checkout-flow' ); ?>
-												</a>
-											</p>
-										<?php endif; ?>
-									</div>
-								</td>
-							</tr>
-						</table>
-					</td>
-				</tr>
-			</table>
-		</div>
-		<?php
-		$message = ob_get_clean();
-
-		wp_mail( $account_email, $subject, $message, array( 'Content-Type: text/html; charset=UTF-8' ) );
-
-		$order->update_meta_data( '_fls_account_email_sent', 1 );
-		$order->save();
+		$this->send_new_account_email( $order, $account_email, $account_username, $reset_url );
 	}
 
 	public function maybe_add_account_info_to_email( $order, $sent_to_admin, $plain_text, $email_object ) {
