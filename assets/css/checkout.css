@@ -1940,6 +1940,10 @@
     line-height: 0;
 }
 
+.fls-account-box__toggle--hidden {
+    display: none !important;
+}
+
 /* Hide native checkbox completely */
 .fls-toggle__input {
     position: absolute;

@@ -781,7 +781,8 @@
                 $text.empty()
                     .append(document.createTextNode('You already have an account with us. To track your order, submit warranty or damage requests, and access your purchase history after checkout, please sign in to your account.'))
                     .append($loginBtn);
-                $toggle.prop('checked', true).prop('disabled', false);
+                $toggle.prop('checked', false);
+                $section.find('.fls-account-box__toggle').addClass('fls-account-box__toggle--hidden');
             } else if (status === 'new_account') {
                 $text.text(
                     'To track your order and access warranty or damage requests after purchase, you need an account. '
@@ -789,6 +790,7 @@
                     + 'If you do not want us to create an account, please uncheck the option below.'
                 );
                 $toggle.prop('checked', true).prop('disabled', false);
+                $section.find('.fls-account-box__toggle').removeClass('fls-account-box__toggle--hidden');
             } else {
                 return;
             }
@@ -1469,6 +1471,24 @@
         if (State.get().deliveryAvailable === false) {
             Delivery.ensureBlockedUi();
         }
+
+        // On the first updated_checkout after page load, if the postcode field is
+        // pre-filled but the delivery tab is absent (session was cleared on page load),
+        // silently re-run calculateShipping to restore delivery availability.
+        // Covers: returning customers with saved addresses, page refreshes, and
+        // postcode service errors that cleared the session mid-flow.
+        const state = State.get();
+        if (!state.autoCalcDone) {
+            state.autoCalcDone = true;
+            if (!state.calculatingShipping && !$('[data-fls-delivery-tab="delivery"]').length) {
+                const useDifferent = $('#ship-to-different-address-checkbox').is(':checked');
+                const postcode = $.trim((useDifferent ? $('#shipping_postcode') : $('#billing_postcode')).val() || '');
+                if (postcode) {
+                    Delivery.calculateShipping(postcode, function () {});
+                }
+            }
+        }
+
         setTimeout(function () { Toast.position(); }, 60);
     });
 
