@@ -700,8 +700,7 @@
                 const continueToStep = function () {
                     if (postcode) {
                         $('.fls-checkout-step-notice').remove();
-                        Delivery.calculateShipping(postcode, function (success, message) {
-                            if (!success && message) Delivery.showPanelError(message);
+                        Delivery.calculateShipping(postcode, function (success) {
                             Steps.go(targetStep);
                         });
                         return;
