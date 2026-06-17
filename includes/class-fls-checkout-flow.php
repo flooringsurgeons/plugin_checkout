@@ -181,7 +181,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/css/checkout.css',
 			array( 'fls-checkout-flow-flatpickr' ),
-			'2.9.17'
+			'2.9.18'
 		);
 
 		wp_enqueue_script(
@@ -734,6 +734,25 @@ class FLS_Checkout_Flow {
 		$has_coupon_discount      = $this->has_coupon_discount_row( $discount_rows );
 		$vat_data                 = $this->get_manual_vat_breakdown_data();
 
+		$product_discount_amount = 0.0;
+		foreach ( $discount_rows as $row ) {
+			if ( 'product_discount' === $row['type'] ) {
+				$product_discount_amount = $row['amount'];
+				break;
+			}
+		}
+		$has_product_discount = $product_discount_amount > 0;
+
+		if ( $has_product_discount ) {
+			$cart = WC()->cart;
+			if ( $cart->display_prices_including_tax() ) {
+				$current_subtotal_float = $cart->get_subtotal() + $cart->get_subtotal_tax();
+			} else {
+				$current_subtotal_float = $cart->get_subtotal();
+			}
+			$original_subtotal_formatted = wc_price( $current_subtotal_float + $product_discount_amount );
+		}
+
 		ob_start();
 		?>
         <div id="fls-checkout-order-details" class="fls-order-details">
@@ -797,9 +816,17 @@ class FLS_Checkout_Flow {
 	            <?php echo $this->get_coupon_block_html(); ?>
 
                 <div class="fls-order-details__totals">
-                    <div class="fls-order-details__row">
-                        <span><?php esc_html_e( 'Subtotal', 'woocommerce' ); ?></span>
-                        <span><?php echo wp_kses_post( WC()->cart->get_cart_subtotal() ); ?></span>
+                    <div class="fls-order-details__row<?php echo $has_product_discount ? ' fls-order-details__row--subtotal-discounted' : ''; ?>">
+						<?php if ( $has_product_discount ) : ?>
+                            <span><?php esc_html_e( 'Subtotal', 'woocommerce' ); ?> <span class="fls-order-details__subtotal-discount-tag">(<?php esc_html_e( 'with Product discount', 'fls-checkout-flow' ); ?>)</span></span>
+                            <span class="fls-order-details__subtotal-prices">
+                                <span class="fls-order-details__subtotal-original"><?php echo wp_kses_post( $original_subtotal_formatted ); ?></span>
+                                <span><?php echo wp_kses_post( WC()->cart->get_cart_subtotal() ); ?></span>
+                            </span>
+						<?php else : ?>
+                            <span><?php esc_html_e( 'Subtotal', 'woocommerce' ); ?></span>
+                            <span><?php echo wp_kses_post( WC()->cart->get_cart_subtotal() ); ?></span>
+						<?php endif; ?>
                     </div>
 
                     <?php $shipping_html = $this->get_shipping_total_html(); ?>
@@ -811,6 +838,7 @@ class FLS_Checkout_Flow {
                     <?php endif; ?>
 
 					<?php foreach ( $discount_rows as $discount_row ) : ?>
+						<?php if ( 'product_discount' === $discount_row['type'] ) : continue; endif; ?>
                         <div class="fls-order-details__row fls-order-details__row--discount-line">
                             <span><?php echo esc_html( $discount_row['label'] ); ?></span>
 

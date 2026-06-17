@@ -1476,6 +1476,30 @@
     gap: 5px;
 }
 
+.fls-order-details__row--subtotal-discounted {
+    align-items: flex-start;
+}
+
+.fls-order-details__subtotal-discount-tag {
+    color: #6b7280;
+    font-weight: 400;
+    font-size: 0.82em;
+}
+
+.fls-order-details__subtotal-prices {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.fls-order-details__subtotal-original {
+    text-decoration: line-through;
+    color: #9ca3af;
+    font-size: 0.88em;
+}
+
 .fls-checkout-toast-stack {
     position: fixed;
     z-index: 99999;
