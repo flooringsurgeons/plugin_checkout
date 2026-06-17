@@ -990,7 +990,9 @@ class FLS_Checkout_Flow {
 
 		// When delivery is blocked and no delivery rates exist, still keep
 		// the Delivery tab visible (so we can show the warning).
-		if ( empty( $delivery_rates ) && ! $delivery_blocked && ! empty( $pickup_rates ) ) {
+		// Only force pickup when postcode has actually been calculated and confirmed no delivery rates —
+		// before calculation ($has_calculated = false) we always default to delivery so the tab stays visible.
+		if ( empty( $delivery_rates ) && ! $delivery_blocked && $has_calculated && ! empty( $pickup_rates ) ) {
 			$active_mode = 'pickup';
 		}
 
@@ -1002,7 +1004,7 @@ class FLS_Checkout_Flow {
             <input type="hidden" name="fls_delivery_date" value="<?php echo esc_attr( $stored_date ); ?>" data-fls-delivery-date-input />
 
             <div class="fls-delivery-method__tabs" role="tablist" aria-label="<?php esc_attr_e( 'Delivery type', 'fls-checkout-flow' ); ?>">
-				<?php if ( ! empty( $delivery_rates ) || $delivery_blocked ) : ?>
+				<?php if ( ! empty( $delivery_rates ) || $delivery_blocked || ! $has_calculated ) : ?>
                     <button type="button" class="fls-delivery-method__tab<?php echo 'delivery' === $active_mode ? ' is-active' : ''; ?>" data-fls-delivery-tab="delivery" role="tab" aria-selected="<?php echo 'delivery' === $active_mode ? 'true' : 'false'; ?>">
                         <span><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
 													<path d="M15.9497 6.65002H2.68969C2.43969 6.65002 2.23969 6.85002 2.23969 7.10002V12.2C2.23969 12.3 2.31969 12.38 2.41969 12.38H5.83969C6.11969 12.38 6.33969 12.6 6.33969 12.88C6.33969 13.16 6.11969 13.38 5.83969 13.38L2.50969 13.41L2.49969 14.34L4.46969 14.39C4.74969 14.39 4.96969 14.61 4.96969 14.89C4.96969 15.17 4.74969 15.39 4.46969 15.39H0.929688C0.649687 15.39 0.429688 15.61 0.429688 15.89C0.429688 16.17 0.649687 16.39 0.929688 16.39L5.08969 16.38C5.24969 15.27 6.18969 14.42 7.33969 14.42C8.48969 14.42 9.42969 15.28 9.58969 16.38H15.9497C16.1997 16.38 16.3997 16.18 16.3997 15.93V7.10002C16.4097 6.85002 16.1997 6.65002 15.9497 6.65002Z"/>
@@ -1027,7 +1029,7 @@ class FLS_Checkout_Flow {
 				<?php endif; ?>
             </div>
 
-			<?php if ( ! empty( $delivery_rates ) || $delivery_blocked ) : ?>
+			<?php if ( ! empty( $delivery_rates ) || $delivery_blocked || ! $has_calculated ) : ?>
                 <div class="fls-delivery-method__panel<?php echo 'delivery' === $active_mode ? ' is-active' : ''; ?>" data-fls-delivery-panel="delivery">
 					<?php if ( ! empty( $delivery_rates ) ) : ?>
                     <div class="fls-delivery-method__options">
