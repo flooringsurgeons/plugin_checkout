@@ -697,14 +697,33 @@
                 const useDifferent = $('#ship-to-different-address-checkbox').is(':checked');
                 const postcode = $.trim((useDifferent ? $('#shipping_postcode') : $('#billing_postcode')).val() || '');
 
-                if (postcode) {
+                const continueToStep = function () {
+                    if (postcode) {
+                        $('.fls-checkout-step-notice').remove();
+                        Delivery.calculateShipping(postcode, function (success, message) {
+                            if (!success && message) Delivery.showPanelError(message);
+                            Steps.go(targetStep);
+                        });
+                        return;
+                    }
                     $('.fls-checkout-step-notice').remove();
-                    Delivery.calculateShipping(postcode, function (success, message) {
-                        if (!success && message) Delivery.showPanelError(message);
-                        Steps.go(targetStep);
-                    });
-                    return;
+                    Steps.go(targetStep);
+                };
+
+                const freeSample = Config.get('freeSample', {});
+                const email = $('#billing_email').val() || '';
+                if (freeSample.enabled && freeSample.isPerUser && email) {
+                    $.post(Config.shippingAjaxUrl(), {
+                        action: 'fls_validate_place_free_sample',
+                        billing_email: email,
+                        shipping_address_1: (useDifferent ? $('#shipping_address_1') : $('#billing_address_1')).val() || '',
+                        shipping_city: (useDifferent ? $('#shipping_city') : $('#billing_city')).val() || '',
+                        shipping_postcode: postcode
+                    }).always(continueToStep);
+                } else {
+                    continueToStep();
                 }
+                return;
             }
 
             if (current === 2) {

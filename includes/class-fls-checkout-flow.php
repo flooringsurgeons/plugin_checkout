@@ -239,6 +239,10 @@ class FLS_Checkout_Flow {
 					'saveNonce' => wp_create_nonce( 'fls-save-checkout-draft' ),
 					'fields'    => $this->get_checkout_draft_for_js(),
 				),
+				'freeSample' => array(
+					'enabled'   => class_exists( 'bleezlabs\floorista\includes\FreeSampleOrder' ) && \bleezlabs\floorista\includes\FreeSampleOrder::$is_enabled,
+					'isPerUser' => class_exists( 'bleezlabs\floorista\includes\FreeSampleOrder' ) && 'per_user' === \bleezlabs\floorista\includes\FreeSampleOrder::$limit_type,
+				),
 				'i18n'       => array(
 					'stepOneError'          => __( 'Please complete the required customer details before continuing.', 'fls-checkout-flow' ),
 					'stepTwoError'          => __( 'Please choose a delivery option before continuing.', 'fls-checkout-flow' ),
