@@ -1486,6 +1486,13 @@
     font-size: 0.82em;
 }
 
+.fls-order-details__row .fls-order-details__total-vat-label {
+    color: #9ca3af;
+    font-weight: 400;
+    font-size: 11px;
+    vertical-align: middle;
+}
+
 .fls-order-details__subtotal-prices {
     display: flex;
     align-items: center;

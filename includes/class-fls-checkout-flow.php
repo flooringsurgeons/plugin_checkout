@@ -181,7 +181,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/css/checkout.css',
 			array( 'fls-checkout-flow-flatpickr' ),
-			'2.9.18'
+			'2.9.21'
 		);
 
 		wp_enqueue_script(
@@ -790,6 +790,8 @@ class FLS_Checkout_Flow {
 								<?php echo wp_kses_post( $thumbnail_html ); ?>
 								<?php if ( $is_sample ) : ?>
                                     <span class="fls-order-details__sample-badge"><?php esc_html_e( 'Sample', 'fls-checkout-flow' ); ?></span>
+								<?php else : ?>
+									<?php get_template_part( 'includes/admin/campaignManager/view/front/sections/campaign', 'badge', [ 'on_thumbnail' => true, 'product_id' => $product->get_id() ] ); ?>
 								<?php endif; ?>
 							</div>
 
@@ -900,7 +902,7 @@ class FLS_Checkout_Flow {
 	                    <?php endif; ?>
 
                         <div class="fls-order-details__row">
-                            <span><?php esc_html_e( 'Total', 'woocommerce' ); ?></span>
+                            <span><?php esc_html_e( 'Total', 'woocommerce' ); ?> <span class="fls-order-details__total-vat-label">(<?php esc_html_e( 'incl. VAT', 'fls-checkout-flow' ); ?>)</span></span>
                             <strong><?php echo wp_kses_post( wc_price( $vat_data['total'] ) ); ?></strong>
                         </div>
                     </div>
