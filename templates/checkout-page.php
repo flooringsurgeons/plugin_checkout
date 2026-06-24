@@ -48,7 +48,7 @@ get_header( 'noheader' );
     <div class="fls-checkout-mobile-total-bar" id="fls-mobile-total-bar">
         <div class="fls-checkout-mobile-total-bar__label">
             <strong><?php esc_html_e( 'Order Total', 'fls-checkout-flow' ); ?></strong>
-            <span class="fls-checkout-mobile-total-bar__vat"><?php esc_html_e( '(incl. VAT)', 'fls-checkout-flow' ); ?></span>
+            <span class="fls-checkout-mobile-total-bar__vat"><?php esc_html_e( '(inc VAT)', 'fls-checkout-flow' ); ?></span>
         </div>
         <div class="fls-checkout-mobile-total-bar__right">
             <button type="button" class="fls-checkout-mobile-total-bar__view-btn" data-fls-mobile-view-details>

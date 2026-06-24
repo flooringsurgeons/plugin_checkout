@@ -875,7 +875,6 @@ class FLS_Checkout_Flow {
                                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 6L8 10L12 6" stroke="#4B5563" stroke-linecap="round" stroke-linejoin="round"/></svg>
                             </span>
 		                </span>
-                            <span><?php echo wp_kses_post( wc_price( $vat_data['total'] ) ); ?></span>
                         </button>
 
                         <div class="fls-order-details__vat-breakdown" data-fls-vat-breakdown style="display:none;">
@@ -885,7 +884,7 @@ class FLS_Checkout_Flow {
                             </div>
 
                             <div class="fls-order-details__row fls-order-details__row--vat-meta">
-                                <span><?php esc_html_e( 'Total EX-VAT', 'fls-checkout-flow' ); ?></span>
+                                <span><?php esc_html_e( 'Total Exc. VAT', 'fls-checkout-flow' ); ?></span>
                                 <span><?php echo wp_kses_post( wc_price( $vat_data['total_ex_vat'] ) ); ?></span>
                             </div>
                         </div>
@@ -902,7 +901,7 @@ class FLS_Checkout_Flow {
 	                    <?php endif; ?>
 
                         <div class="fls-order-details__row">
-                            <span><?php esc_html_e( 'Total', 'woocommerce' ); ?> <span class="fls-order-details__total-vat-label">(<?php esc_html_e( 'incl. VAT', 'fls-checkout-flow' ); ?>)</span></span>
+                            <span><?php esc_html_e( 'Total', 'woocommerce' ); ?> <span class="fls-order-details__total-vat-label">(<?php esc_html_e( 'inc VAT', 'fls-checkout-flow' ); ?>)</span></span>
                             <strong><?php echo wp_kses_post( wc_price( $vat_data['total'] ) ); ?></strong>
                         </div>
                     </div>
