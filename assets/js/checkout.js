@@ -1,6 +1,40 @@
 (function ($) {
     'use strict';
 
+    // -- Bank Holidays ----------------------------------------------------------
+    // Add or remove dates here (YYYY-MM-DD format, England & Wales).
+    const BANK_HOLIDAYS = [
+        // 2026
+        '2026-08-31', // Summer bank holiday
+        '2026-12-25', // Christmas Day
+        '2026-12-28', // Boxing Day (substitute day)
+        // 2027
+        '2027-01-01', // New Year's Day
+        '2027-03-26', // Good Friday
+        '2027-03-29', // Easter Monday
+        '2027-05-03', // Early May bank holiday
+        '2027-05-31', // Spring bank holiday
+        '2027-08-30', // Summer bank holiday
+        '2027-12-27', // Christmas Day (substitute day)
+        '2027-12-28', // Boxing Day (substitute day)
+        // 2028
+        '2028-01-03', // New Year's Day (substitute day)
+        '2028-04-14', // Good Friday
+        '2028-04-17', // Easter Monday
+        '2028-05-01', // Early May bank holiday
+        '2028-05-29', // Spring bank holiday
+        '2028-08-28', // Summer bank holiday
+        '2028-12-25', // Christmas Day
+        '2028-12-26', // Boxing Day
+    ];
+
+    function isBankHoliday(date) {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return BANK_HOLIDAYS.indexOf(y + '-' + m + '-' + d) !== -1;
+    }
+
     // -- Config -----------------------------------------------------------------
 
     const Config = {
@@ -68,8 +102,8 @@
             const min = new Date(today);
             min.setDate(min.getDate() + offset);
 
-            // If result lands on weekend, advance to Monday
-            while (min.getDay() === 0 || min.getDay() === 6) {
+            // If result lands on weekend or bank holiday, advance to next working day
+            while (min.getDay() === 0 || min.getDay() === 6 || isBankHoliday(min)) {
                 min.setDate(min.getDate() + 1);
             }
 
@@ -301,7 +335,7 @@
 
                 if (isDelivery) {
                     options.disable = [function (date) {
-                        return date.getDay() === 0 || date.getDay() === 6;
+                        return date.getDay() === 0 || date.getDay() === 6 || isBankHoliday(date);
                     }];
                 }
 
