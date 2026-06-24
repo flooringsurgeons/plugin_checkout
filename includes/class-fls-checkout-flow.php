@@ -181,7 +181,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/css/checkout.css',
 			array( 'fls-checkout-flow-flatpickr' ),
-			'2.9.21'
+			'2.9.22'
 		);
 
 		wp_enqueue_script(
@@ -1747,9 +1747,10 @@ class FLS_Checkout_Flow {
 	 * Check whether the current cart qualifies for free shipping based on the
 	 * Free Shipping Threshold configured in admin.
 	 *
+	 * @param string|null $region Already-resolved UK region key, or null to resolve from session postcode.
 	 * @return bool
 	 */
-	private function cart_qualifies_for_free_shipping() {
+	private function cart_qualifies_for_free_shipping( $region = null ) {
 		$settings       = $this->get_post_price_settings();
 		$free_threshold = isset( $settings['free_shipping_threshold'] ) ? (float) $settings['free_shipping_threshold'] : 0;
 
@@ -1764,13 +1765,15 @@ class FLS_Checkout_Flow {
 			return false;
 		}
 
-		$postcode = WC()->session ? WC()->session->get( 'fls_calculated_shipping_postcode' ) : '';
+		if ( null === $region ) {
+			$postcode = WC()->session ? WC()->session->get( 'fls_calculated_shipping_postcode' ) : '';
 
-		if ( empty( $postcode ) ) {
-			return false;
+			if ( empty( $postcode ) ) {
+				return false;
+			}
+
+			$region = $this->get_uk_region_for_postcode( $postcode );
 		}
-
-		$region = $this->get_uk_region_for_postcode( $postcode );
 
 		if ( ! in_array( $region, $free_regions, true ) ) {
 			return false;
@@ -1834,7 +1837,7 @@ class FLS_Checkout_Flow {
 
 		$calculated_amount  = $this->calculate_post_price_shipping_cost( $postcode );
 		$delivery_available = null !== $calculated_amount;
-		$is_free            = $delivery_available && ( $calculated_amount <= 0 || $this->cart_qualifies_for_free_shipping() );
+		$is_free            = $delivery_available && ( $calculated_amount <= 0 || $this->cart_qualifies_for_free_shipping( $resolved_region ) );
 
 		WC()->session->set( 'fls_calculated_shipping_postcode', $postcode );
 		WC()->session->set( 'fls_calculated_shipping_amount', $calculated_amount );
