@@ -842,7 +842,7 @@ class FLS_Checkout_Flow {
 					<?php foreach ( $discount_rows as $discount_row ) : ?>
 						<?php if ( 'product_discount' === $discount_row['type'] ) : continue; endif; ?>
                         <div class="fls-order-details__row fls-order-details__row--discount-line">
-                            <span><?php echo esc_html( $discount_row['label'] ); ?><?php if ( $has_product_discount && 'coupon' === $discount_row['type'] ) : ?> <span class="fls-order-details__subtotal-discount-tag">(<?php esc_html_e( 'with Product discount', 'fls-checkout-flow' ); ?>)</span><?php endif; ?></span>
+                            <span><?php echo esc_html( $discount_row['label'] ); ?><?php if ( $has_product_discount && 'coupon' === $discount_row['type'] ) : ?> <span class="fls-order-details__subtotal-discount-tag">(<?php esc_html_e( 'Additional Discount', 'fls-checkout-flow' ); ?>)</span><?php endif; ?></span>
 
                             <span class="fls-order-details__row-value fls-order-details__row-value--discount">
                                 - <?php echo wp_kses_post( wc_price( $discount_row['amount'] ) ); ?>
