@@ -196,7 +196,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/js/checkout.js',
 			array( 'jquery', 'wc-checkout', 'fls-checkout-flow-flatpickr' ),
-			'2.8.37',
+			'2.8.39',
 			true
 		);
 
@@ -611,6 +611,41 @@ class FLS_Checkout_Flow {
 		return $total;
 	}
 
+	private function get_free_sample_discount_total() {
+		$total = 0.0;
+
+		if ( ! WC()->cart ) {
+			return $total;
+		}
+
+		foreach ( WC()->cart->get_cart() as $cart_item ) {
+			if ( empty( $cart_item['sample_product'] ) ) {
+				continue;
+			}
+
+			$product  = isset( $cart_item['data'] ) ? $cart_item['data'] : false;
+			$quantity = isset( $cart_item['quantity'] ) ? (int) $cart_item['quantity'] : 0;
+
+			if ( ! $product || ! $product->exists() || $quantity <= 0 ) {
+				continue;
+			}
+
+			$sample_price = isset( $cart_item['sample_price'] ) ? (float) $cart_item['sample_price'] : 0.0;
+
+			if ( $sample_price <= 0 ) {
+				$regular_price = (float) $product->get_regular_price();
+				$current_price = (float) $product->get_price();
+				$sample_price  = $regular_price > 0 ? $regular_price : $current_price;
+			}
+
+			if ( $sample_price > 0 ) {
+				$total += $sample_price * $quantity;
+			}
+		}
+
+		return $total;
+	}
+
 	private function get_order_details_discount_rows() {
 		$rows  = array();
 		$total = 0.0;
@@ -638,10 +673,16 @@ class FLS_Checkout_Flow {
 			WC()->cart->calculate_fees();
 		}
 
+		$has_free_sample_fee = false;
+
 		foreach ( WC()->cart->get_fees() as $fee ) {
 			$fee_total = ! empty( $fee->total ) ? (float) $fee->total : (float) $fee->amount;
 
 			if ( $fee_total < 0 ) {
+				if ( false !== strpos( strtolower( (string) $fee->name ), 'sample' ) ) {
+					$has_free_sample_fee = true;
+				}
+
 				$rows[] = array(
 					'label'     => $fee->name,
 					'amount'    => abs( $fee_total ),
@@ -650,6 +691,18 @@ class FLS_Checkout_Flow {
 				);
 				$total += abs( $fee_total );
 			}
+		}
+
+		$free_sample_discount = $this->get_free_sample_discount_total();
+
+		if ( $free_sample_discount > 0 && ! $has_free_sample_fee ) {
+			$rows[] = array(
+				'label'     => __( 'Free Sample', 'fls-checkout-flow' ),
+				'amount'    => $free_sample_discount,
+				'type'      => 'free_sample',
+				'removable' => false,
+			);
+			$total += $free_sample_discount;
 		}
 
 		$applied_coupons = array_values( WC()->cart->get_applied_coupons() );
@@ -891,7 +944,7 @@ class FLS_Checkout_Flow {
                     </div>
 
                     <div class="fls-order-details__row--total">
-	                    <?php if ( $discount_total > 0 && $has_coupon_discount ) : ?>
+	                    <?php if ( $discount_total > 0 ) : ?>
                             <div class="fls-order-details__row fls-order-details__row--discount-total">
                                 <span><?php esc_html_e( 'Discount total', 'fls-checkout-flow' ); ?></span>
                                 <span class="fls-order-details__row-value fls-order-details__row-value--discount">
@@ -1751,7 +1804,7 @@ class FLS_Checkout_Flow {
 	 */
 	private function cart_qualifies_for_free_shipping( $region = null ) {
 		$settings       = $this->get_post_price_settings();
-		$free_threshold = isset( $settings['free_shipping_threshold'] ) ? (float) $settings['free_shipping_threshold'] : 0;
+		$free_threshold = fls_get_free_shipping_threshold();
 
 		if ( $free_threshold <= 0 || ! WC()->cart ) {
 			return false;

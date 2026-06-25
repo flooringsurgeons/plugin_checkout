@@ -18,7 +18,7 @@ $shipping_classes        = WC()->shipping()->get_shipping_classes();
 $saved_settings          = FLS_Checkout_Flow::init()->get_post_price_settings();
 $enabled_regions         = isset( $saved_settings['enabled_regions'] ) ? (array) $saved_settings['enabled_regions'] : array();
 $region_prices           = isset( $saved_settings['region_prices'] ) ? (array) $saved_settings['region_prices'] : array();
-$free_shipping_threshold = isset( $saved_settings['free_shipping_threshold'] ) ? (float) $saved_settings['free_shipping_threshold'] : 0;
+$free_shipping_threshold = fls_get_free_shipping_threshold();
 $free_shipping_regions   = isset( $saved_settings['free_shipping_regions'] ) ? (array) $saved_settings['free_shipping_regions'] : array();
 ?>
 

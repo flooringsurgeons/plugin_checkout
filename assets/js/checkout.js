@@ -94,7 +94,7 @@
             } else if (day === 0) {
                 offset = 3; // Sunday: skip Sun + 2 working days = Wednesday
             } else {
-                offset = (hour >= 9 && hour < 17) ? 2 : 3; // working hours vs after hours
+                offset = (hour >= 9 && hour < 14) ? 2 : 3; // working hours vs after hours (cutoff 2pm)
             }
 
             const today = new Date();
@@ -292,8 +292,12 @@
                 const $wrap = $(input).closest('[data-fls-date-wrap]');
                 const isDelivery = mode === 'delivery';
 
+                const maxDate = new Date();
+                maxDate.setDate(maxDate.getDate() + 56); // 8 weeks ahead
+
                 const options = {
                     minDate: Config.deliveryMinDate(),
+                    maxDate: maxDate,
                     dateFormat: 'F j, Y',
                     disableMobile: true,
                     defaultDate: Delivery.getDate(mode) || null,
@@ -1532,7 +1536,13 @@
         const state = State.get();
         if (!state.autoCalcDone) {
             state.autoCalcDone = true;
-            if (!state.calculatingShipping && !$('[data-fls-delivery-tab="delivery"]').length) {
+            // Also trigger when the delivery tab exists but its panel has no content —
+            // this happens when the session was cleared (e.g. page refresh on step 2).
+            const deliveryPanelEmpty = $('[data-fls-delivery-panel="delivery"]').length &&
+                !$('[data-fls-delivery-panel="delivery"] [data-fls-shipping-card]').length &&
+                !$('[data-fls-delivery-warning]').length;
+
+            if (!state.calculatingShipping && (!$('[data-fls-delivery-tab="delivery"]').length || deliveryPanelEmpty)) {
                 const useDifferent = $('#ship-to-different-address-checkbox').is(':checked');
                 const postcode = $.trim((useDifferent ? $('#shipping_postcode') : $('#billing_postcode')).val() || '');
                 if (postcode) {
