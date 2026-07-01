@@ -181,7 +181,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/css/checkout.css',
 			array( 'fls-checkout-flow-flatpickr' ),
-			'2.9.22'
+			'2.9.24'
 		);
 
 		wp_enqueue_script(
@@ -196,7 +196,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/js/checkout.js',
 			array( 'jquery', 'wc-checkout', 'fls-checkout-flow-flatpickr' ),
-			'2.8.39',
+			'2.8.42',
 			true
 		);
 
@@ -250,6 +250,7 @@ class FLS_Checkout_Flow {
 					'chooseDate'            => __( 'Select your date', 'fls-checkout-flow' ),
 					'deliveryNotAvailable'  => __( 'Delivery is not available in your area yet.', 'fls-checkout-flow' ),
 					'deliveryNotAvailableSub' => __( 'Enter another postcode or select in-store pickup to continue.', 'fls-checkout-flow' ),
+					'deliveryOptionsMissing' => __( 'Delivery options are not available for this postcode.', 'fls-checkout-flow' ),
 					'discountApplied'       => __( 'Discount Applied', 'fls-checkout-flow' ),
 					'couponRemoved'         => __( 'Coupon has been removed.', 'woocommerce' ),
 					'couponEmpty'           => __( 'Please enter a discount code.', 'fls-checkout-flow' ),
@@ -982,7 +983,7 @@ class FLS_Checkout_Flow {
 	public function get_shipping_methods_html() {
 		ob_start();
 		?>
-        <div id="fls-checkout-shipping-methods" class="fls-checkout-shipping-methods">
+        <div id="fls-checkout-shipping-methods" class="fls-checkout-shipping-methods" data-needs-shipping="<?php echo WC()->cart->needs_shipping() ? '1' : '0'; ?>">
 			<?php if ( WC()->cart->needs_shipping() ) : ?>
 				<?php $this->render_shipping_methods_markup(); ?>
 			<?php else : ?>
@@ -1107,6 +1108,18 @@ class FLS_Checkout_Flow {
                         <span class="fls-delivery-method__warning-text">
                             <strong><?php esc_html_e( 'Delivery is not available in your area yet.', 'fls-checkout-flow' ); ?></strong>
                             <span><?php esc_html_e( 'Enter another postcode or select in-store pickup to continue.', 'fls-checkout-flow' ); ?></span>
+                        </span>
+                    </div>
+					<?php endif; ?>
+
+					<?php if ( empty( $delivery_rates ) && ! $delivery_blocked ) : ?>
+                    <div class="fls-delivery-method__warning" data-fls-delivery-warning>
+                        <span class="fls-delivery-method__warning-icon" aria-hidden="true">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 18.3337C14.6024 18.3337 18.3333 14.6027 18.3333 10.0003C18.3333 5.39795 14.6024 1.66699 10 1.66699C5.39762 1.66699 1.66666 5.39795 1.66666 10.0003C1.66666 14.6027 5.39762 18.3337 10 18.3337Z" stroke="currentColor" stroke-width="1.5"/><path d="M10 6.66699V10.8337" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M9.99539 13.333H10.0029" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                        </span>
+                        <span class="fls-delivery-method__warning-text">
+                            <strong><?php esc_html_e( 'Delivery options are not ready yet.', 'fls-checkout-flow' ); ?></strong>
+                            <span><?php esc_html_e( 'Go back and check your postcode so we can calculate the available delivery methods.', 'fls-checkout-flow' ); ?></span>
                         </span>
                     </div>
 					<?php endif; ?>
@@ -1305,16 +1318,29 @@ class FLS_Checkout_Flow {
 
 	public function validate_step_two_fields() {
 		if ( empty( $_POST['shipping_method'] ) || ! is_array( $_POST['shipping_method'] ) ) {
+			if ( WC()->cart && WC()->cart->needs_shipping() ) {
+				wc_add_notice( __( 'Please choose a delivery option before continuing.', 'fls-checkout-flow' ), 'error' );
+			}
 			return;
 		}
 
 		$shipping_method_values = array_map( 'sanitize_text_field', wp_unslash( $_POST['shipping_method'] ) );
 		$chosen_rate_id         = reset( $shipping_method_values );
 		$delivery_date          = isset( $_POST['fls_delivery_date'] ) ? sanitize_text_field( wp_unslash( $_POST['fls_delivery_date'] ) ) : '';
-		$rate                   = $this->find_shipping_rate_by_id( $chosen_rate_id );
+		$is_pickup              = str_starts_with( $chosen_rate_id, 'local_pickup' );
 
-		if ( $rate && empty( $delivery_date ) ) {
-			wc_add_notice( __( 'Please choose a date for your delivery method.', 'fls-checkout-flow' ), 'error' );
+		if ( ! $is_pickup ) {
+			$postcode           = WC()->session ? WC()->session->get( 'fls_calculated_shipping_postcode' ) : '';
+			$delivery_available = WC()->session ? WC()->session->get( 'fls_delivery_available' ) : false;
+
+			if ( empty( $postcode ) || ! $delivery_available ) {
+				wc_add_notice( __( 'The selected delivery option is no longer available. Please choose another option.', 'fls-checkout-flow' ), 'error' );
+				return;
+			}
+
+			if ( empty( $delivery_date ) ) {
+				wc_add_notice( __( 'Please choose a date for your delivery method.', 'fls-checkout-flow' ), 'error' );
+			}
 		}
 	}
 
@@ -1536,7 +1562,19 @@ class FLS_Checkout_Flow {
 
 		// Invalidate WC shipping rate transient cache so WC recalculates
 		// rates from scratch on this fresh page load.
+		$this->reset_shipping_package_cache();
+	}
+
+	private function reset_shipping_package_cache() {
 		WC_Cache_Helper::get_transient_version( 'shipping', true );
+
+		if ( ! WC()->session || ! WC()->cart ) {
+			return;
+		}
+
+		foreach ( array_keys( WC()->cart->get_shipping_packages() ) as $package_index ) {
+			WC()->session->__unset( 'shipping_for_package_' . $package_index );
+		}
 	}
 
 	private function get_shipping_total_html() {
@@ -1896,9 +1934,12 @@ class FLS_Checkout_Flow {
 		WC()->session->set( 'fls_delivery_available', $delivery_available );
 		WC()->session->set( 'fls_free_shipping', $is_free );
 
-		// Invalidate WC shipping rate transient cache so the next
-		// update_checkout recalculates rates with our override filter.
-		WC_Cache_Helper::get_transient_version( 'shipping', true );
+		// Invalidate WC shipping caches so the next update_checkout receives
+		// rates built from the postcode result stored above.
+		$this->reset_shipping_package_cache();
+		if ( WC()->cart ) {
+			WC()->cart->calculate_shipping();
+		}
 
 		wp_send_json_success(
 			array(

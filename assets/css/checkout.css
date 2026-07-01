@@ -899,10 +899,28 @@
     border-radius: 8px;
 }
 
-/* Out-of-month and disabled days */
-.fls-flatpickr-calendar .flatpickr-day.prevMonthDay,
-.fls-flatpickr-calendar .flatpickr-day.nextMonthDay {
+/* Out-of-month days */
+.fls-flatpickr-calendar .flatpickr-day.prevMonthDay {
     color: #d1d5db;
+}
+
+.fls-flatpickr-calendar .flatpickr-day.nextMonthDay {
+    color: #374151;
+    cursor: pointer;
+}
+
+.fls-flatpickr-calendar .flatpickr-day.nextMonthDay:hover,
+.fls-flatpickr-calendar .flatpickr-day.nextMonthDay:focus {
+    background: #f3f4f6;
+    color: #374151;
+    border-color: transparent;
+}
+
+/* Secondary month name in header (e.g. "June / July") */
+.fls-flatpickr-calendar .fls-next-month-label {
+    font-weight: 700;
+    color: #9ca3af;
+    font-size: 16px;
 }
 
 .fls-flatpickr-calendar .flatpickr-day.flatpickr-disabled,

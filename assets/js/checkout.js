@@ -184,6 +184,26 @@
 
         safeHtml(text) {
             return $('<div />').text(text).html();
+        },
+
+        isMobileCheckout() {
+            return window.matchMedia && window.matchMedia('(max-width: 991px)').matches;
+        },
+
+        mobileTopOffset() {
+            const $topbar = $('.fls-checkout-mobile-topbar:visible').first();
+            return ($topbar.outerHeight() || 0) + 1;
+        },
+
+        scrollToStepHeader(step) {
+            if (!this.isMobileCheckout()) return;
+
+            const $header = $('[data-fls-step="' + step + '"] .fls-checkout-step__header').first();
+            const $target = $header.length ? $header : $('[data-fls-step="' + step + '"]').first();
+            if (!$target.length) return;
+
+            const top = Math.max(0, $target.offset().top - this.mobileTopOffset());
+            $('html, body').stop(true).animate({ scrollTop: top }, 260);
         }
     };
 
@@ -283,6 +303,28 @@
             this.instances = {};
         },
 
+        _syncMonthLabel(instance) {
+            requestAnimationFrame(function () {
+                const container = instance.calendarContainer;
+                if (!container) return;
+                const existing = container.querySelector('.fls-next-month-label');
+                if (existing) existing.remove();
+                const nextDays = container.querySelectorAll('.flatpickr-day.nextMonthDay');
+                if (!nextDays.length) return;
+                const firstNext = nextDays[0];
+                if (!firstNext.dateObj) return;
+                const monthNames = (instance.l10n && instance.l10n.months && instance.l10n.months.longhand) ||
+                    ['January','February','March','April','May','June','July','August','September','October','November','December'];
+                const nextMonthName = monthNames[firstNext.dateObj.getMonth()];
+                const curMonthEl = container.querySelector('.flatpickr-current-month span.cur-month');
+                if (!curMonthEl) return;
+                const label = document.createElement('span');
+                label.className = 'fls-next-month-label';
+                label.textContent = ' / ' + nextMonthName;
+                curMonthEl.parentNode.insertBefore(label, curMonthEl.nextSibling);
+            });
+        },
+
         init() {
             if (typeof window.flatpickr !== 'function') return;
             this.destroy();
@@ -317,6 +359,18 @@
                         if (instance.calendarContainer) {
                             $(instance.calendarContainer).addClass('fls-flatpickr-calendar');
                         }
+                        DatePicker._syncMonthLabel(instance);
+                    },
+                    onMonthChange(_, __, instance) {
+                        DatePicker._syncMonthLabel(instance);
+                    },
+                    onDayCreate(_, __, instance, dayElem) {
+                        if (!dayElem.classList.contains('nextMonthDay')) return;
+                        dayElem.addEventListener('click', function (e) {
+                            if (dayElem.classList.contains('flatpickr-disabled')) return;
+                            e.stopPropagation();
+                            instance.setDate(dayElem.dateObj, true);
+                        });
                     },
                     onOpen(_, __, instance) {
                         if (instance.calendarContainer) {
@@ -376,7 +430,13 @@
         },
 
         needsShipping() {
-            return $('[data-fls-shipping-card]').length > 0;
+            const $methods = $('#fls-checkout-shipping-methods');
+            if (!$methods.length) return $('[data-fls-shipping-card]').length > 0;
+            return $methods.attr('data-needs-shipping') !== '0';
+        },
+
+        hasRate(mode) {
+            return $('[data-fls-shipping-card][data-mode="' + mode + '"]').length > 0;
         },
 
         selectedCard(mode) {
@@ -465,7 +525,7 @@
         },
 
         showPanelError(message) {
-            $('[data-fls-delivery-service-error]').remove();
+            $('[data-fls-delivery-service-error], [data-fls-delivery-warning]').remove();
             const icon = '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">'
                 + '<path d="M8.57465 3.21667L1.51631 15C1.37079 15.2529 1.29379 15.5389 1.29297 15.8304C1.29215 16.1219 1.36754 16.4083 1.51163 16.662C1.65572 16.9157 1.86342 17.1276 2.11384 17.2764C2.36425 17.4252 2.64864 17.5057 2.93965 17.5H17.0563C17.3473 17.5057 17.6317 17.4252 17.8821 17.2764C18.1325 17.1276 18.3402 16.9157 18.4843 16.662C18.6284 16.4083 18.7038 16.1219 18.703 15.8304C18.7022 15.5389 18.6252 15.2529 18.4796 15L11.4213 3.21667C11.2727 2.97138 11.0635 2.76865 10.814 2.62882C10.5645 2.48899 10.2836 2.41602 9.99798 2.41602C9.71235 2.41602 9.43143 2.48899 9.18197 2.62882C8.93251 2.76865 8.72324 2.97138 8.57465 3.21667Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'
                 + '<path d="M10 7.5V10.8333" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'
@@ -518,7 +578,7 @@
             }
 
             state.calculatingShipping = true;
-            $('[data-fls-delivery-service-error]').remove();
+            $('[data-fls-delivery-service-error], [data-fls-delivery-warning]').remove();
             Delivery.setPanelDisabled(false);
             $postcodeField.addClass('fls-field--calculating');
             DOM.setButtonLoading($continueBtn, true);
@@ -546,16 +606,41 @@
 
                     Delivery.setMode('delivery');
 
-                    const timeout = setTimeout(function () {
+                    let refreshAttempts = 0;
+                    let refreshTimeout = null;
+                    const waitForRatesRefresh = function () {
+                        clearTimeout(refreshTimeout);
+                        refreshTimeout = setTimeout(finishAfterRatesRefresh, Config.shippingCalcTimeout);
+                        $(document.body).one('updated_checkout.flsShippingCalc', function () {
+                            clearTimeout(refreshTimeout);
+                            finishAfterRatesRefresh();
+                        });
+                    };
+                    const finishAfterRatesRefresh = function () {
                         $(document.body).off('updated_checkout.flsShippingCalc');
-                        done(true);
-                    }, Config.shippingCalcTimeout);
+                        initDeliveryState();
 
-                    $(document.body).one('updated_checkout.flsShippingCalc', function () {
-                        clearTimeout(timeout);
-                        done(true);
-                    });
+                        if (!Delivery.hasRate('delivery')) {
+                            if (state.deliveryAvailable && refreshAttempts < 1) {
+                                refreshAttempts++;
+                                waitForRatesRefresh();
+                                $(document.body).trigger('update_checkout');
+                                return;
+                            }
 
+                            state.deliveryAvailable = false;
+                            Delivery.showPanelError(Config.i18n('deliveryOptionsMissing', 'Delivery options are not available for this postcode.'));
+                            Steps.updateButtons();
+                            done(false, Config.i18n('deliveryOptionsMissing', 'Delivery options are not available for this postcode.'));
+                            return;
+                        }
+
+                        $('[data-fls-delivery-service-error], [data-fls-delivery-warning]').remove();
+                        Delivery.setPanelDisabled(false);
+                        done(true);
+                    };
+
+                    waitForRatesRefresh();
                     $(document.body).trigger('update_checkout');
                 })
                 .fail(function () {
@@ -620,6 +705,8 @@
     // -- Steps ------------------------------------------------------------------
 
     const Steps = {
+        _scrollTimer: null,
+
         active() {
             return State.get().activeStep || 1;
         },
@@ -694,6 +781,15 @@
             this.updateButtons();
         },
 
+        _scrollActiveIntoView(step) {
+            if (!DOM.isMobileCheckout()) return;
+
+            clearTimeout(this._scrollTimer);
+            this._scrollTimer = setTimeout(function () {
+                DOM.scrollToStepHeader(step);
+            }, Config.animDuration + 40);
+        },
+
         go(step, options) {
             const settings = options || {};
             const state = State.get();
@@ -703,6 +799,10 @@
             state.steps[normalized].available = true;
             state.activeStep = normalized;
             this.syncUi(normalized, !!settings.immediate);
+
+            if (!settings.immediate && settings.scroll !== false && previousStep !== normalized) {
+                this._scrollActiveIntoView(normalized);
+            }
 
             if (normalized === 3 && previousStep !== 3) {
                 const $payment = $('#fls-checkout-payment');
