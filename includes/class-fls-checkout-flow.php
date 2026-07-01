@@ -54,8 +54,8 @@ class FLS_Checkout_Flow {
 
 		add_action( 'wp_ajax_fls_calculate_shipping', array( $this, 'ajax_calculate_shipping' ) );
 		add_action( 'wp_ajax_nopriv_fls_calculate_shipping', array( $this, 'ajax_calculate_shipping' ) );
-		add_filter( 'woocommerce_package_rates', array( $this, 'inject_pickup_rate_if_missing' ), 98, 2 );
-		add_filter( 'woocommerce_package_rates', array( $this, 'override_shipping_rates_with_post_price' ), 99, 2 );
+		add_filter( 'woocommerce_package_rates', array( $this, 'inject_pickup_rate_if_missing' ), 998, 2 );
+		add_filter( 'woocommerce_package_rates', array( $this, 'override_shipping_rates_with_post_price' ), 999, 2 );
 
 		add_filter( 'woocommerce_order_button_html', array( $this, 'custom_payment_order_button_html' ) );
 		add_action( 'woocommerce_checkout_before_terms_and_conditions', array( $this, 'render_payment_email_opt_in' ) );
@@ -196,7 +196,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/js/checkout.js',
 			array( 'jquery', 'wc-checkout', 'fls-checkout-flow-flatpickr' ),
-			'2.8.42',
+			'2.8.43',
 			true
 		);
 
@@ -1327,7 +1327,8 @@ class FLS_Checkout_Flow {
 		$shipping_method_values = array_map( 'sanitize_text_field', wp_unslash( $_POST['shipping_method'] ) );
 		$chosen_rate_id         = reset( $shipping_method_values );
 		$delivery_date          = isset( $_POST['fls_delivery_date'] ) ? sanitize_text_field( wp_unslash( $_POST['fls_delivery_date'] ) ) : '';
-		$is_pickup              = str_starts_with( $chosen_rate_id, 'local_pickup' );
+		$rate                   = $this->find_shipping_rate_by_id( $chosen_rate_id );
+		$is_pickup              = $rate && 'local_pickup' === $rate->get_method_id();
 
 		if ( ! $is_pickup ) {
 			$postcode           = WC()->session ? WC()->session->get( 'fls_calculated_shipping_postcode' ) : '';
@@ -1559,6 +1560,11 @@ class FLS_Checkout_Flow {
 		WC()->session->set( 'fls_calculated_shipping_amount', null );
 		WC()->session->set( 'fls_delivery_available', null );
 		WC()->session->set( 'fls_free_shipping', null );
+		WC()->session->__unset( 'custom_shipping_choice' );
+		WC()->session->__unset( 'custom_delivery_region' );
+		WC()->session->__unset( 'custom_delivery_price' );
+		WC()->session->__unset( 'custom_delivery_label' );
+		WC()->session->__unset( 'custom_delivery_class' );
 
 		// Invalidate WC shipping rate transient cache so WC recalculates
 		// rates from scratch on this fresh page load.
@@ -1915,6 +1921,11 @@ class FLS_Checkout_Flow {
 			WC()->session->set( 'fls_calculated_shipping_amount', null );
 			WC()->session->set( 'fls_delivery_available', null );
 			WC()->session->set( 'fls_free_shipping', null );
+			WC()->session->__unset( 'custom_shipping_choice' );
+			WC()->session->__unset( 'custom_delivery_region' );
+			WC()->session->__unset( 'custom_delivery_price' );
+			WC()->session->__unset( 'custom_delivery_label' );
+			WC()->session->__unset( 'custom_delivery_class' );
 
 			wp_send_json_error( array( 'message' => __( 'We could not validate this postcode right now. Please check the postcode and try again.', 'fls-checkout-flow' ), 'error_type' => 'service_error' ) );
 			return;

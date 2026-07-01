@@ -941,9 +941,9 @@
                 $section.find('.fls-account-box__toggle').addClass('fls-account-box__toggle--hidden');
             } else if (status === 'new_account') {
                 $text.text(
-                    'To track your order and access warranty or damage requests after purchase, you need an account. '
-                    + 'We will automatically create one for you after checkout and send your login details by email. '
-                    + 'If you do not want us to create an account, please uncheck the option below.'
+                    'To track your orders and access warranty or claim services after purchase, you\'ll need an account. '
+                    + 'We\'ll automatically create one for you after checkout and email you your login details. '
+                    + 'If you prefer not to have an account created, simply turn off the option on the right.'
                 );
                 $toggle.prop('checked', true).prop('disabled', false);
                 $section.find('.fls-account-box__toggle').removeClass('fls-account-box__toggle--hidden');
