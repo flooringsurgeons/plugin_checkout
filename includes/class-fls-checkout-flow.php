@@ -181,7 +181,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/css/checkout.css',
 			array( 'fls-checkout-flow-flatpickr' ),
-			'2.9.24'
+			'2.9.25'
 		);
 
 		wp_enqueue_script(
@@ -196,7 +196,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/js/checkout.js',
 			array( 'jquery', 'wc-checkout', 'fls-checkout-flow-flatpickr' ),
-			'2.8.43',
+			'2.8.44',
 			true
 		);
 
@@ -766,7 +766,7 @@ class FLS_Checkout_Flow {
                         />
                     </div>
 
-                    <button type="button" class="fls-order-details__coupon-button" data-fls-coupon-submit>
+                    <button type="button" class="fls-order-details__coupon-button" data-fls-coupon-submit disabled>
 						<?php echo esc_html__( 'Apply', 'woocommerce' ); ?>
                     </button>
                 </div>

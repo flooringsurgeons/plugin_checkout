@@ -1334,6 +1334,15 @@
     font-size: 12px;
 }
 
+.fls-order-details__coupon-button[disabled] {
+    cursor: not-allowed;
+    opacity: 1;
+}
+
+.fls-order-details__coupon-button:not([disabled]) {
+    background: #389382;
+}
+
 .fls-order-details__totals {
     display: grid;
     gap: 14px;

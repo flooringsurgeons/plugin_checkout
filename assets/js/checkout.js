@@ -1097,6 +1097,11 @@
                     if (event.key !== 'Enter') return;
                     event.preventDefault();
                     $(this).closest('[data-fls-coupon-form]').find('[data-fls-coupon-submit]').first().trigger('click');
+                })
+                .off('input.flsCouponInput')
+                .on('input.flsCouponInput', '[data-fls-coupon-form] [name="coupon_code"]', function () {
+                    const hasValue = $.trim($(this).val() || '') !== '';
+                    $(this).closest('[data-fls-coupon-form]').find('[data-fls-coupon-submit]').first().prop('disabled', !hasValue);
                 });
         }
     };
