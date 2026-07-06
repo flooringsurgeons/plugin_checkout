@@ -1346,12 +1346,27 @@ class FLS_Checkout_Flow {
 	}
 
 	public function save_step_two_fields( $order, $data ) {
-		if ( ! empty( $_POST['fls_delivery_mode'] ) ) {
-			$order->update_meta_data( '_fls_delivery_mode', sanitize_text_field( wp_unslash( $_POST['fls_delivery_mode'] ) ) );
+		$delivery_mode = ! empty( $_POST['fls_delivery_mode'] ) ? sanitize_text_field( wp_unslash( $_POST['fls_delivery_mode'] ) ) : '';
+		$delivery_date = ! empty( $_POST['fls_delivery_date'] ) ? sanitize_text_field( wp_unslash( $_POST['fls_delivery_date'] ) ) : '';
+
+		if ( $delivery_mode ) {
+			$order->update_meta_data( '_fls_delivery_mode', $delivery_mode );
+
+			// Mirror into the theme meta so the order admin screen (and CRM) show the
+			// shipping choice the same way legacy orders do.
+			$order->update_meta_data( '_custom_shipping_choice', 'pickup' === $delivery_mode ? 'pickup' : 'delivery' );
 		}
 
-		if ( ! empty( $_POST['fls_delivery_date'] ) ) {
-			$order->update_meta_data( '_fls_delivery_date', sanitize_text_field( wp_unslash( $_POST['fls_delivery_date'] ) ) );
+		if ( $delivery_date ) {
+			$order->update_meta_data( '_fls_delivery_date', $delivery_date );
+
+			// The theme renders the "Delivery Date" row from _delivery_date and the CRM
+			// reads _requested_fulfilment_date, both expecting a Y-m-d value. Normalise
+			// our display date ("F j, Y") so it lands in the same place as legacy orders.
+			$timestamp  = strtotime( $delivery_date );
+			$normalised = $timestamp ? gmdate( 'Y-m-d', $timestamp ) : $delivery_date;
+			$order->update_meta_data( '_delivery_date', $normalised );
+			$order->update_meta_data( '_requested_fulfilment_date', $normalised );
 		}
 
 		if ( ! is_user_logged_in() ) {
