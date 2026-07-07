@@ -35,6 +35,15 @@
         return BANK_HOLIDAYS.indexOf(y + '-' + m + '-' + d) !== -1;
     }
 
+    function isWeekend(date) {
+        const day = date.getDay(); // 0=Sun, 6=Sat
+        return day === 0 || day === 6;
+    }
+
+    function isUnavailableSelectableDate(date, includeBankHolidays) {
+        return isWeekend(date) || (includeBankHolidays && isBankHoliday(date));
+    }
+
     // -- Config -----------------------------------------------------------------
 
     const Config = {
@@ -103,7 +112,7 @@
             min.setDate(min.getDate() + offset);
 
             // If result lands on weekend or bank holiday, advance to next working day
-            while (min.getDay() === 0 || min.getDay() === 6 || isBankHoliday(min)) {
+            while (isUnavailableSelectableDate(min, true)) {
                 min.setDate(min.getDate() + 1);
             }
 
@@ -333,6 +342,16 @@
                 const mode = $(input).attr('data-fls-date-display');
                 const $wrap = $(input).closest('[data-fls-date-wrap]');
                 const isDelivery = mode === 'delivery';
+                const currentDate = Delivery.getDate(mode);
+                const parsedCurrentDate = currentDate
+                    ? window.flatpickr.parseDate(currentDate, 'F j, Y')
+                    : null;
+
+                if (parsedCurrentDate && isUnavailableSelectableDate(parsedCurrentDate, isDelivery)) {
+                    Delivery.setDate(mode, '');
+                    $(input).val('');
+                    Delivery.syncHiddenFields();
+                }
 
                 const maxDate = new Date();
                 maxDate.setDate(maxDate.getDate() + 56); // 8 weeks ahead
@@ -341,6 +360,9 @@
                     minDate: Config.deliveryMinDate(),
                     maxDate: maxDate,
                     dateFormat: 'F j, Y',
+                    disable: [function (date) {
+                        return isUnavailableSelectableDate(date, isDelivery);
+                    }],
                     disableMobile: true,
                     defaultDate: Delivery.getDate(mode) || null,
                     allowInput: false,
@@ -390,12 +412,6 @@
                         Steps.updateButtons();
                     }
                 };
-
-                if (isDelivery) {
-                    options.disable = [function (date) {
-                        return date.getDay() === 0 || date.getDay() === 6 || isBankHoliday(date);
-                    }];
-                }
 
                 DatePicker.instances[mode] = window.flatpickr(input, options);
             });

@@ -196,7 +196,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/js/checkout.js',
 			array( 'jquery', 'wc-checkout', 'fls-checkout-flow-flatpickr' ),
-			'2.8.44',
+			'2.8.45',
 			true
 		);
 
@@ -1296,15 +1296,7 @@ class FLS_Checkout_Flow {
 	}
 
 	private function get_pickup_location_data( $rate = null ) {
-		$store_parts = array_filter(
-			array(
-				get_option( 'woocommerce_store_address' ),
-				get_option( 'woocommerce_store_city' ),
-				get_option( 'woocommerce_store_postcode' ),
-			)
-		);
-
-		$address = implode( ', ', $store_parts );
+		$address = $this->get_pickup_address();
 		$title   = $rate ? $this->get_rate_primary_label( $rate ) : __( 'Pick up address', 'fls-checkout-flow' );
 
 		$data = array(
@@ -1314,6 +1306,45 @@ class FLS_Checkout_Flow {
 		);
 
 		return apply_filters( 'fls_checkout_pickup_location', $data, $rate );
+	}
+
+	private function get_pickup_address() {
+		return '214A Dudley Road, Birmingham B63 3NJ';
+	}
+
+	private function parse_checkout_date( $date ) {
+		$date = trim( (string) $date );
+		if ( '' === $date ) {
+			return null;
+		}
+
+		$timezone = function_exists( 'wp_timezone' ) ? wp_timezone() : new DateTimeZone( 'UTC' );
+		$formats  = array( 'F j, Y', 'Y-m-d' );
+
+		foreach ( $formats as $format ) {
+			$datetime = DateTimeImmutable::createFromFormat( '!' . $format, $date, $timezone );
+			$errors   = DateTimeImmutable::getLastErrors();
+
+			if ( $datetime && ( false === $errors || ( 0 === $errors['warning_count'] && 0 === $errors['error_count'] ) ) ) {
+				return $datetime;
+			}
+		}
+
+		$timestamp = strtotime( $date );
+		if ( false === $timestamp ) {
+			return null;
+		}
+
+		return ( new DateTimeImmutable( '@' . $timestamp ) )->setTimezone( $timezone );
+	}
+
+	private function is_weekend_checkout_date( $date ) {
+		$datetime = $this->parse_checkout_date( $date );
+		if ( ! $datetime ) {
+			return false;
+		}
+
+		return in_array( (int) $datetime->format( 'w' ), array( 0, 6 ), true );
 	}
 
 	public function validate_step_two_fields() {
@@ -1329,6 +1360,11 @@ class FLS_Checkout_Flow {
 		$delivery_date          = isset( $_POST['fls_delivery_date'] ) ? sanitize_text_field( wp_unslash( $_POST['fls_delivery_date'] ) ) : '';
 		$rate                   = $this->find_shipping_rate_by_id( $chosen_rate_id );
 		$is_pickup              = $rate && 'local_pickup' === $rate->get_method_id();
+
+		if ( ! empty( $delivery_date ) && $this->is_weekend_checkout_date( $delivery_date ) ) {
+			wc_add_notice( __( 'Saturday and Sunday are not available. Please choose another date.', 'fls-checkout-flow' ), 'error' );
+			return;
+		}
 
 		if ( ! $is_pickup ) {
 			$postcode           = WC()->session ? WC()->session->get( 'fls_calculated_shipping_postcode' ) : '';
@@ -1995,15 +2031,8 @@ class FLS_Checkout_Flow {
 			}
 		}
 
-		$store_name  = get_bloginfo( 'name' );
-		$store_parts = array_filter(
-			array(
-				get_option( 'woocommerce_store_address' ),
-				get_option( 'woocommerce_store_city' ),
-				get_option( 'woocommerce_store_postcode' ),
-			)
-		);
-		$address = implode( ', ', $store_parts );
+		$store_name = get_bloginfo( 'name' );
+		$address    = $this->get_pickup_address();
 
 		// Build label in "Title | Description" format so the card splits it correctly.
 		$label = ! empty( $address ) ? $store_name . ' | ' . $address : $store_name;
