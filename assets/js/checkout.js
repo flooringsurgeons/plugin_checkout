@@ -553,14 +553,11 @@
                 + '<span class="fls-delivery-method__warning-text"><strong>' + DOM.safeHtml(message) + '</strong><span>' + DOM.safeHtml(subtext) + '</span></span>'
                 + '</div>';
 
-            const $actions = $('#fls-checkout-shipping-methods .fls-checkout-step__actions').first();
-            if ($actions.length) {
-                $actions.before(html);
+            const $deliveryPanel = $('[data-fls-delivery-panel="delivery"]').first();
+            if ($deliveryPanel.length) {
+                $deliveryPanel.append(html);
             } else {
-                ($('[data-fls-delivery-panel="delivery"]').length
-                    ? $('[data-fls-delivery-panel="delivery"]')
-                    : $('[data-fls-delivery-method]')
-                ).append(html);
+                $('[data-fls-delivery-method]').append(html);
             }
             this.setPanelDisabled(true);
         },
