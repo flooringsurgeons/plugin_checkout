@@ -2292,6 +2292,14 @@ class FLS_Checkout_Flow {
 
 		$order->set_customer_id( $user_id );
 
+		// Populate the new customer's name and address meta from the order.
+		// wc_create_new_customer() only creates the bare account, so without this
+		// the user has no billing_first_name/first_name meta. Gateways that read
+		// customer details from user meta (e.g. WooCommerce Stripe, which builds
+		// the required Stripe customer "name" from user meta for logged-in orders)
+		// would otherwise fail with "Missing required customer field: name".
+		$this->populate_customer_meta_from_order( $user_id, $order );
+
 		$user      = get_user_by( 'id', $user_id );
 		$reset_url = '';
 
@@ -2319,6 +2327,60 @@ class FLS_Checkout_Flow {
 		$order->save();
 
 		$this->send_new_account_email( $order, $email, $username, $reset_url );
+	}
+
+	/**
+	 * Copy the order's billing/shipping details onto a freshly created customer
+	 * so gateways and the account profile can read them from user meta.
+	 *
+	 * @param int      $user_id New customer user ID.
+	 * @param WC_Order $order   The order the account was created for.
+	 */
+	private function populate_customer_meta_from_order( $user_id, $order ) {
+		if ( ! $user_id || ! class_exists( 'WC_Customer' ) ) {
+			return;
+		}
+
+		try {
+			$customer = new WC_Customer( $user_id );
+		} catch ( Exception $e ) {
+			return;
+		}
+
+		$first_name = $order->get_billing_first_name();
+		$last_name  = $order->get_billing_last_name();
+
+		// WP core name fields — Stripe falls back to these when billing_* is empty.
+		$customer->set_first_name( $first_name );
+		$customer->set_last_name( $last_name );
+
+		// Billing address.
+		$customer->set_billing_first_name( $first_name );
+		$customer->set_billing_last_name( $last_name );
+		$customer->set_billing_company( $order->get_billing_company() );
+		$customer->set_billing_email( $order->get_billing_email() );
+		$customer->set_billing_phone( $order->get_billing_phone() );
+		$customer->set_billing_address_1( $order->get_billing_address_1() );
+		$customer->set_billing_address_2( $order->get_billing_address_2() );
+		$customer->set_billing_city( $order->get_billing_city() );
+		$customer->set_billing_state( $order->get_billing_state() );
+		$customer->set_billing_postcode( $order->get_billing_postcode() );
+		$customer->set_billing_country( $order->get_billing_country() );
+
+		// Shipping address (fall back to billing when no separate shipping name).
+		$ship_first = $order->get_shipping_first_name() ? $order->get_shipping_first_name() : $first_name;
+		$ship_last  = $order->get_shipping_last_name() ? $order->get_shipping_last_name() : $last_name;
+		$customer->set_shipping_first_name( $ship_first );
+		$customer->set_shipping_last_name( $ship_last );
+		$customer->set_shipping_company( $order->get_shipping_company() );
+		$customer->set_shipping_address_1( $order->get_shipping_address_1() );
+		$customer->set_shipping_address_2( $order->get_shipping_address_2() );
+		$customer->set_shipping_city( $order->get_shipping_city() );
+		$customer->set_shipping_state( $order->get_shipping_state() );
+		$customer->set_shipping_postcode( $order->get_shipping_postcode() );
+		$customer->set_shipping_country( $order->get_shipping_country() );
+
+		$customer->save();
 	}
 
 	private function send_new_account_email( $order, $account_email, $account_username, $reset_url ) {
