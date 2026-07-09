@@ -92,28 +92,33 @@
         },
 
         getUkDeliveryMinDate() {
+            const WORKING_DAYS_LEAD = 2;
+            const CUTOFF_HOUR = 14; // 2pm UK time
+
             const now = new Date();
             const ukDate = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/London' }));
-            const day = ukDate.getDay(); // 0=Sun, 6=Sat
             const hour = ukDate.getHours();
 
-            let offset;
-            if (day === 6) {
-                offset = 4; // Saturday: skip Sat+Sun + 2 working days = Wednesday
-            } else if (day === 0) {
-                offset = 3; // Sunday: skip Sun + 2 working days = Wednesday
-            } else {
-                offset = (hour >= 9 && hour < 14) ? 2 : 3; // working hours vs after hours (cutoff 2pm)
+            // The working day the order is treated as being processed on.
+            const start = new Date();
+            start.setHours(0, 0, 0, 0);
+
+            // Orders after the 2pm cutoff (or placed on a weekend/bank holiday)
+            // only start processing on the next available working day.
+            const afterCutoff = hour >= CUTOFF_HOUR;
+            if (afterCutoff || isUnavailableSelectableDate(start, true)) {
+                do {
+                    start.setDate(start.getDate() + 1);
+                } while (isUnavailableSelectableDate(start, true));
             }
 
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const min = new Date(today);
-            min.setDate(min.getDate() + offset);
-
-            // If result lands on weekend or bank holiday, advance to next working day
-            while (isUnavailableSelectableDate(min, true)) {
+            // Add the working-day lead time, skipping weekends and bank holidays
+            // as we count so only real working days advance the delivery date.
+            const min = new Date(start);
+            let added = 0;
+            while (added < WORKING_DAYS_LEAD) {
                 min.setDate(min.getDate() + 1);
+                if (!isUnavailableSelectableDate(min, true)) added++;
             }
 
             return min;
