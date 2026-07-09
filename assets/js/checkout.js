@@ -856,6 +856,10 @@
                         $('.fls-checkout-step-notice').remove();
                         Delivery.calculateShipping(postcode, function (success) {
                             Steps.go(targetStep);
+                            if (!success) {
+                                Delivery.setMode('delivery');
+                                Delivery.showPanelError(Config.i18n('deliveryNotAvailable', 'Delivery is not available in your area yet.'));
+                            }
                         });
                         return;
                     }

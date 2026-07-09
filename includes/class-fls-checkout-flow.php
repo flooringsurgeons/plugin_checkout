@@ -196,7 +196,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/js/checkout.js',
 			array( 'jquery', 'wc-checkout', 'fls-checkout-flow-flatpickr' ),
-			'2.8.45',
+			'2.8.47',
 			true
 		);
 
