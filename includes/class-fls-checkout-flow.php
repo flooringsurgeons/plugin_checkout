@@ -58,7 +58,6 @@ class FLS_Checkout_Flow {
 		add_filter( 'woocommerce_package_rates', array( $this, 'override_shipping_rates_with_post_price' ), 999, 2 );
 
 		add_filter( 'woocommerce_order_button_html', array( $this, 'custom_payment_order_button_html' ) );
-		add_action( 'woocommerce_checkout_before_terms_and_conditions', array( $this, 'render_payment_email_opt_in' ) );
 		add_filter( 'woocommerce_get_privacy_policy_text', array( $this, 'custom_checkout_privacy_policy_text' ), 10, 2 );
 		add_filter( 'woocommerce_get_terms_and_conditions_checkbox_text', array( $this, 'custom_terms_checkbox_text' ) );
 
@@ -181,7 +180,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/css/checkout.css',
 			array( 'fls-checkout-flow-flatpickr' ),
-			'2.9.25'
+			'2.9.28'
 		);
 
 		wp_enqueue_script(
@@ -196,7 +195,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/js/checkout.js',
 			array( 'jquery', 'wc-checkout', 'fls-checkout-flow-flatpickr' ),
-			'2.8.47',
+			'2.8.49',
 			true
 		);
 
@@ -1479,23 +1478,6 @@ class FLS_Checkout_Flow {
 		<?php
 
 		return ob_get_clean();
-	}
-
-	/**
-	 * Output the "Email me exclusive offers" opt-in checkbox before the terms and conditions.
-	 */
-	public function render_payment_email_opt_in() {
-		if ( ! $this->should_modify_payment_output() ) {
-			return;
-		}
-		?>
-		<div class="fls-checkout-payment__email-optin">
-			<label class="fls-checkout-payment__email-optin-label">
-				<input type="checkbox" name="fls_email_optin" value="1" class="fls-checkout-payment__email-optin-checkbox" />
-				<span><?php esc_html_e( 'Email me exclusive offers and updates (optional)', 'fls-checkout-flow' ); ?></span>
-			</label>
-		</div>
-		<?php
 	}
 
 	/**

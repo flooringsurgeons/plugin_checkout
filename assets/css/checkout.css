@@ -443,14 +443,23 @@
     opacity: 1;
 }
 
-.fls-checkout-step__button.is-ready:not([disabled]) {
+.fls-checkout-step__button.is-ready:not([disabled]),
+#place_order:not([disabled]) {
     background: #389382;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
-.fls-checkout-step__button.is-ready:not([disabled]):hover {
+.fls-checkout-step__button.is-ready:not([disabled]):hover,
+#place_order:not([disabled]):hover {
     opacity: 1;
     transform: translateY(-1px);
+}
+
+#place_order[disabled] {
+    background: #9ecdc3;
+    box-shadow: none;
+    cursor: not-allowed;
+    opacity: 1;
 }
 
 .fls-checkout-step__button--secondary {
@@ -1070,12 +1079,8 @@
     padding-top: 18px;
 }
 
-/* Email opt-in checkbox */
-.fls-checkout-payment__email-optin {
-    padding-top: 0;
-}
-
-.fls-checkout-payment__email-optin-label {
+.fls-checkout-payment .omnisend_newsletter_checkbox_field .checkbox,
+.fls-checkout-payment .omnisend_sms_checkbox_field .checkbox {
     display: flex;
     align-items: flex-start;
     gap: 12px;
@@ -1086,7 +1091,8 @@
     line-height: 1.45;
 }
 
-.fls-checkout-payment .fls-checkout-payment__email-optin-checkbox,
+.fls-checkout-payment .omnisend_newsletter_checkbox_field input[type="checkbox"],
+.fls-checkout-payment .omnisend_sms_checkbox_field input[type="checkbox"],
 .fls-checkout-payment .woocommerce-terms-and-conditions-wrapper .woocommerce-form__input-checkbox {
     flex-shrink: 0;
     appearance: none;
@@ -1102,13 +1108,15 @@
     position: relative;
 }
 
-.fls-checkout-payment .fls-checkout-payment__email-optin-checkbox:checked,
+.fls-checkout-payment .omnisend_newsletter_checkbox_field input[type="checkbox"]:checked,
+.fls-checkout-payment .omnisend_sms_checkbox_field input[type="checkbox"]:checked,
 .fls-checkout-payment .woocommerce-terms-and-conditions-wrapper .woocommerce-form__input-checkbox:checked {
     background: #389382;
     border-color: #389382;
 }
 
-.fls-checkout-payment .fls-checkout-payment__email-optin-checkbox:checked::after,
+.fls-checkout-payment .omnisend_newsletter_checkbox_field input[type="checkbox"]:checked::after,
+.fls-checkout-payment .omnisend_sms_checkbox_field input[type="checkbox"]:checked::after,
 .fls-checkout-payment .woocommerce-terms-and-conditions-wrapper .woocommerce-form__input-checkbox:checked::after {
     content: "";
     position: absolute;

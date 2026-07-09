@@ -987,6 +987,19 @@
     // -- Payment ----------------------------------------------------------------
 
     const Payment = {
+        canPlaceOrder() {
+            const $terms = $('#terms');
+            const termsAccepted = !$terms.length || $terms.is(':checked');
+            const $methods = $('#fls-checkout-payment input[name="payment_method"]');
+            const paymentSelected = !$methods.length || $methods.filter(':checked').length > 0;
+
+            return termsAccepted && paymentSelected;
+        },
+
+        updatePlaceOrderState() {
+            DOM.setButtonState($('#place_order'), this.canPlaceOrder());
+        },
+
         sync() {
             const $payment = $('#fls-checkout-payment');
             if (!$payment.length) return;
@@ -994,6 +1007,7 @@
             $payment.find('input[name="payment_method"]:checked').each(function () {
                 $(this).closest('.wc_payment_method').addClass('is-selected');
             });
+            this.updatePlaceOrderState();
         },
 
         bind() {
@@ -1001,6 +1015,10 @@
                 .off('change.flsPaymentMethod')
                 .on('change.flsPaymentMethod', '#fls-checkout-payment input[name="payment_method"]', function () {
                     Payment.sync();
+                })
+                .off('change.flsPlaceOrderState')
+                .on('change.flsPlaceOrderState', '#terms', function () {
+                    Payment.updatePlaceOrderState();
                 });
         }
     };
