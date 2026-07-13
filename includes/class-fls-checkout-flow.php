@@ -1808,6 +1808,24 @@ class FLS_Checkout_Flow {
 	 * @param string $postcode
 	 * @return float|null
 	 */
+
+	const DEFAULT_SHIPPING_CLASS_SLUG = 'all-flooring';
+
+	private function get_default_shipping_class_id() {
+		static $cached = null;
+
+		if ( null !== $cached ) {
+			return $cached;
+		}
+
+		$slug = apply_filters( 'fls_default_shipping_class_slug', self::DEFAULT_SHIPPING_CLASS_SLUG );
+		$term = get_term_by( 'slug', $slug, 'product_shipping_class' );
+
+		$cached = ( $term && ! is_wp_error( $term ) ) ? (int) $term->term_id : 0;
+
+		return $cached;
+	}
+
 	private function calculate_post_price_shipping_cost( $postcode ) {
 		if ( ! WC()->cart ) {
 			return null;
@@ -1849,6 +1867,10 @@ class FLS_Checkout_Flow {
 			$has_shippable = true;
 
 			$shipping_class_id = $product->get_shipping_class_id();
+
+			if ( ! $shipping_class_id ) {
+				$shipping_class_id = $this->get_default_shipping_class_id();
+			}
 
 			if ( ! $shipping_class_id ) {
 				continue;
