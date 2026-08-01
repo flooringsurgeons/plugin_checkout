@@ -180,7 +180,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/css/checkout.css',
 			array( 'fls-checkout-flow-flatpickr' ),
-			'2.9.30'
+			'2.9.31'
 		);
 
 		wp_enqueue_script(
@@ -195,7 +195,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/js/checkout.js',
 			array( 'jquery', 'wc-checkout', 'fls-checkout-flow-flatpickr' ),
-			'2.8.50',
+			'2.8.51',
 			true
 		);
 
@@ -1021,12 +1021,35 @@ class FLS_Checkout_Flow {
 		return ob_get_clean();
 	}
 
+	/**
+	 * Whether the cart is made up exclusively of free sample products.
+	 *
+	 * Sample-only orders skip delivery date selection — they are dispatched on a
+	 * fixed two-working-day promise instead of a customer-chosen date.
+	 *
+	 * @return bool
+	 */
+	private function cart_has_only_samples() {
+		if ( ! WC()->cart || WC()->cart->is_empty() ) {
+			return false;
+		}
+
+		foreach ( WC()->cart->get_cart() as $cart_item ) {
+			if ( empty( $cart_item['sample_product'] ) ) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
 	private function render_shipping_methods_markup() {
 		$grouped_rates  = $this->get_grouped_shipping_rates();
 		$delivery_rates = $grouped_rates['delivery'];
 		$pickup_rates   = $grouped_rates['pickup'];
 		$stored_date    = $this->get_posted_checkout_value( 'fls_delivery_date' );
 		$stored_mode    = $this->get_posted_checkout_value( 'fls_delivery_mode' );
+		$samples_only   = $this->cart_has_only_samples();
 
 		// Detect whether we have already calculated and delivery is unavailable.
 		$has_calculated     = WC()->session && ! empty( WC()->session->get( 'fls_calculated_shipping_postcode' ) );
@@ -1053,7 +1076,7 @@ class FLS_Checkout_Flow {
 		$pickup_rate = ! empty( $pickup_rates ) ? $pickup_rates[0] : null;
 		$pickup_data = $this->get_pickup_location_data( $pickup_rate ? $pickup_rate['rate'] : null );
 		?>
-        <div class="fls-delivery-method" data-fls-delivery-method data-default-mode="<?php echo esc_attr( $active_mode ); ?>">
+        <div class="fls-delivery-method" data-fls-delivery-method data-default-mode="<?php echo esc_attr( $active_mode ); ?>" data-samples-only="<?php echo $samples_only ? '1' : '0'; ?>">
             <input type="hidden" name="fls_delivery_mode" value="<?php echo esc_attr( $active_mode ); ?>" data-fls-delivery-mode-input />
             <input type="hidden" name="fls_delivery_date" value="<?php echo esc_attr( $stored_date ); ?>" data-fls-delivery-date-input />
 
@@ -1092,11 +1115,15 @@ class FLS_Checkout_Flow {
 						<?php endforeach; ?>
                     </div>
 
+						<?php if ( $samples_only ) : ?>
+							<?php $this->render_sample_delivery_note(); ?>
+						<?php else : ?>
                     <div class="fls-delivery-method__date-row" data-fls-date-wrap="delivery">
                         <label class="screen-reader-text" for="fls-delivery-date-display"><?php esc_html_e( 'Delivery date', 'fls-checkout-flow' ); ?></label>
                         <input id="fls-delivery-date-display" type="text" class="fls-delivery-method__date-input" data-fls-date-display="delivery" placeholder="<?php echo esc_attr__( 'Select Your Date', 'fls-checkout-flow' ); ?>" autocomplete="off" readonly />
                         <span class="fls-delivery-method__date-icon" aria-hidden="true">🗓</span>
                     </div>
+						<?php endif; ?>
 					<?php endif; ?>
 
 					<?php if ( $delivery_blocked ) : ?>
@@ -1155,6 +1182,43 @@ class FLS_Checkout_Flow {
 		<?php
 	}
 
+	/**
+	 * Info banner shown instead of the date picker for sample-only orders.
+	 */
+	private function render_sample_delivery_note() {
+		?>
+        <div class="fls-delivery-method__note" data-fls-sample-note>
+            <span class="fls-delivery-method__note-icon" aria-hidden="true">
+                <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="2.88001" y="2.88001" width="44.16" height="44.16" rx="6.72" fill="#389382"/>
+                    <rect x="2.88001" y="2.88001" width="44.16" height="44.16" rx="6.72" stroke="#389382" stroke-width="1.92"/>
+                    <path d="M31.0891 16.475H10.6466C10.2612 16.475 9.95286 16.775 9.95286 17.15V24.8C9.95286 24.95 10.0762 25.07 10.2304 25.07H15.5029C15.9345 25.07 16.2737 25.4 16.2737 25.82C16.2737 26.24 15.9345 26.57 15.5029 26.57L10.3691 26.615L10.3537 28.01L13.3908 28.085C13.8224 28.085 14.1616 28.415 14.1616 28.835C14.1616 29.255 13.8224 29.585 13.3908 29.585H7.93328C7.50161 29.585 7.16245 29.915 7.16245 30.335C7.16245 30.755 7.50161 31.085 7.93328 31.085L14.3466 31.07C14.5933 29.405 16.0424 28.13 17.8154 28.13C19.5883 28.13 21.0374 29.42 21.2841 31.07H31.0891C31.4745 31.07 31.7829 30.77 31.7829 30.395V17.15C31.7983 16.775 31.4745 16.475 31.0891 16.475Z" fill="white"/>
+                    <path d="M17.0599 28.085H9.65993C9.22827 28.085 8.8891 27.755 8.8891 27.335C8.8891 26.915 9.22827 26.585 9.65993 26.585H17.0599C17.4916 26.585 17.8308 26.915 17.8308 27.335C17.8308 27.74 17.4916 28.085 17.0599 28.085Z" fill="white"/>
+                    <path d="M42.8682 26.63L39.014 20.285C38.8907 20.075 38.6594 19.955 38.4128 19.955H33.649C33.2636 19.955 32.9553 20.255 32.9553 20.63V29.66C32.9553 30.035 33.2636 30.335 33.649 30.335H34.1732C34.6819 29.045 35.9461 28.13 37.4415 28.13C38.9369 28.13 40.2165 29.045 40.7098 30.335H42.2515C42.6369 30.335 42.9453 30.035 42.9453 29.66V26.975C42.9607 26.84 42.9298 26.735 42.8682 26.63ZM39.0603 25.67H35.4373C35.0519 25.67 34.7436 25.37 34.7436 24.995V22.01C34.7436 21.635 35.0519 21.335 35.4373 21.335H37.2411C37.4878 21.335 37.719 21.455 37.8423 21.665L39.6461 24.65C39.939 25.085 39.6153 25.67 39.0603 25.67Z" fill="white"/>
+                    <path d="M17.8154 33.1101C18.7009 33.1101 19.4187 32.4116 19.4187 31.5501C19.4187 30.6885 18.7009 29.9901 17.8154 29.9901C16.9299 29.9901 16.212 30.6885 16.212 31.5501C16.212 32.4116 16.9299 33.1101 17.8154 33.1101Z" stroke="white" stroke-width="1.33333" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M37.4567 33.1101C38.3422 33.1101 39.0601 32.4116 39.0601 31.5501C39.0601 30.6885 38.3422 29.9901 37.4567 29.9901C36.5712 29.9901 35.8534 30.6885 35.8534 31.5501C35.8534 32.4116 36.5712 33.1101 37.4567 33.1101Z" stroke="white" stroke-width="1.33333" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M33.6 0L36.48 1.92H29.76L33.6 0Z" fill="#00B6FC"/>
+                    <path d="M-1.25889e-07 37.44L1.92 29.76L1.92 40.32L-1.25889e-07 37.44Z" fill="#00B6FC"/>
+                    <path d="M0 37.44L33.6 0H3.84C1.71923 0 0 1.71923 0 3.84001V37.44Z" fill="#72D8FF"/>
+                    <path d="M5.48424 17.4034L1.88098 13.9171L4.33227 11.3836L5.12048 12.1462L3.61566 13.7015L4.23497 14.3007L5.58999 12.9002L6.3782 13.6629L5.02319 15.0633L6.43071 16.4252L5.48424 17.4034Z" fill="#0099D4"/>
+                    <path d="M8.28364 14.5101L4.68038 11.0238L6.1852 9.46847C6.44395 9.20104 6.71903 9.01414 7.01044 8.90776C7.30186 8.80138 7.59296 8.781 7.88375 8.84661C8.17454 8.91221 8.44778 9.06872 8.70348 9.31612C8.96153 9.56578 9.1235 9.83377 9.1894 10.1201C9.25643 10.4052 9.23524 10.6947 9.12582 10.9885C9.01753 11.2812 8.83061 11.5647 8.56506 11.8392L7.66625 12.7682L6.90619 12.0328L7.61434 11.3009C7.72556 11.1859 7.80624 11.0744 7.8564 10.9662C7.90651 10.8557 7.9209 10.7481 7.89955 10.6434C7.87933 10.5376 7.8182 10.4353 7.71616 10.3366C7.61294 10.2367 7.50751 10.1778 7.39988 10.16C7.2922 10.1398 7.1834 10.1561 7.07346 10.2087C6.96349 10.259 6.85289 10.3416 6.74168 10.4565L6.40803 10.8014L9.23011 13.5318L8.28364 14.5101ZM8.67254 10.7986L11.198 11.498L10.1698 12.5606L7.66479 11.8402L8.67254 10.7986Z" fill="#0099D4"/>
+                    <path d="M11.4856 11.2006L7.88238 7.71435L10.3949 5.11747L11.1832 5.88009L9.61706 7.49874L10.2364 8.09795L11.6731 6.61301L12.4613 7.37563L11.0246 8.86057L11.6439 9.45977L13.2032 7.84816L13.9914 8.61078L11.4856 11.2006Z" fill="#0099D4"/>
+                    <path d="M14.4676 8.11859L10.8644 4.63231L13.3769 2.03543L14.1651 2.79805L12.599 4.41671L13.2183 5.01591L14.6551 3.53097L15.4433 4.29359L14.0066 5.77853L14.6259 6.37774L16.1852 4.76612L16.9734 5.52874L14.4676 8.11859Z" fill="#0099D4"/>
+                    <path d="M5.07886 21.494C4.95249 21.3899 4.81844 21.3454 4.67672 21.3604C4.53614 21.3743 4.38924 21.4604 4.23604 21.6187C4.13844 21.7196 4.07075 21.8142 4.03296 21.9026C3.99514 21.9886 3.982 22.0667 3.99355 22.1369C4.00509 22.2072 4.03669 22.2684 4.08834 22.3206C4.12947 22.365 4.17614 22.3954 4.22835 22.4118C4.28052 22.426 4.33997 22.4267 4.40671 22.4141C4.47227 22.4003 4.54627 22.3731 4.6287 22.3325C4.71114 22.2919 4.80257 22.2373 4.90301 22.1687L5.25233 21.9344C5.48748 21.7758 5.70832 21.6591 5.91484 21.5841C6.12136 21.5091 6.31523 21.4719 6.49645 21.4724C6.67649 21.4717 6.845 21.5064 7.00198 21.5766C7.16009 21.6455 7.30833 21.7458 7.4467 21.8774C7.6825 22.1078 7.82576 22.3611 7.87648 22.6373C7.92721 22.9135 7.88984 23.202 7.76438 23.5031C7.64006 23.8029 7.43037 24.1053 7.13531 24.4103C6.8323 24.7234 6.52155 24.9519 6.20305 25.0957C5.88569 25.2382 5.56841 25.281 5.25121 25.2239C4.93398 25.1645 4.62407 24.9896 4.32149 24.6991L5.2203 23.7701C5.33623 23.8709 5.45556 23.933 5.57829 23.9564C5.70102 23.9797 5.82486 23.9656 5.94982 23.9139C6.07591 23.861 6.1991 23.7724 6.3194 23.6481C6.4204 23.5437 6.49205 23.4438 6.53433 23.3485C6.57662 23.2531 6.59248 23.1652 6.58192 23.0845C6.57135 23.0039 6.53731 22.9347 6.4798 22.8767C6.42354 22.8246 6.35786 22.7962 6.28276 22.7917C6.20762 22.7849 6.11562 22.8048 6.00674 22.8516C5.89669 22.8973 5.76231 22.9728 5.60362 23.0782L5.17894 23.3622C4.80105 23.6143 4.44209 23.7541 4.10206 23.7816C3.76198 23.8069 3.45176 23.6827 3.17139 23.4092C2.94153 23.1891 2.80056 22.9346 2.74847 22.6457C2.69634 22.3546 2.7283 22.0528 2.84433 21.7404C2.96151 21.4268 3.15798 21.1275 3.43375 20.8425C3.71519 20.5516 4.00729 20.3471 4.31006 20.229C4.61282 20.1109 4.90837 20.08 5.19669 20.1365C5.48499 20.1906 5.74758 20.3311 5.98447 20.558L5.07886 21.494Z" fill="#0099D4"/>
+                    <path d="M9.63927 21.7378L8.6179 22.7934L6.16538 18.1178L7.45912 16.7806L12.2131 19.0776L11.1917 20.1332L7.81817 18.3952L7.79093 18.4234L9.63927 21.7378ZM8.02701 20.5594L9.94719 18.5748L10.6791 19.2829L8.75893 21.2675L8.02701 20.5594Z" fill="#0099D4"/>
+                    <path d="M8.94563 15.2442L10.1236 14.0267L12.9748 15.1639L13.0157 15.1217L11.785 12.3095L12.963 11.092L16.5663 14.5783L15.6402 15.5354L13.5571 13.5199L13.5299 13.5481L14.8086 16.3386L14.2503 16.9157L11.405 15.7161L11.3777 15.7443L13.4749 17.7734L12.5489 18.7305L8.94563 15.2442Z" fill="#0099D4"/>
+                    <path d="M17.0148 14.1147L13.4116 10.6284L14.9164 9.07312C15.1751 8.80569 15.4543 8.62276 15.7539 8.52433C16.0536 8.42589 16.3529 8.41345 16.6519 8.487C16.9509 8.56056 17.2282 8.72103 17.4839 8.96843C17.742 9.2181 17.9098 9.49176 17.9874 9.78942C18.0662 10.0859 18.0567 10.3867 17.9591 10.6919C17.8625 10.9959 17.6814 11.2851 17.4159 11.5596L16.5171 12.4886L15.757 11.7532L16.4652 11.0213C16.5764 10.9063 16.6512 10.7891 16.6896 10.6696C16.728 10.5477 16.7307 10.4288 16.6976 10.3128C16.6656 10.1956 16.5987 10.0876 16.4966 9.98888C16.3934 9.88902 16.2839 9.82619 16.168 9.8004C16.0521 9.7723 15.9351 9.78058 15.817 9.82524C15.6988 9.86758 15.5841 9.94623 15.4729 10.0612L15.1392 10.406L17.9613 13.1365L17.0148 14.1147Z" fill="#0099D4"/>
+                    <path d="M20.1607 10.8633L16.5574 7.37706L17.5039 6.39883L20.3189 9.12248L21.7284 7.6657L22.5166 8.42832L20.1607 10.8633Z" fill="#0099D4"/>
+                    <path d="M22.8992 8.03289L19.2959 4.54662L21.8085 1.94974L22.5967 2.71236L21.0306 4.33101L21.6499 4.93022L23.0867 3.44528L23.8749 4.2079L22.4381 5.69284L23.0575 6.29204L24.6167 4.68043L25.405 5.44305L22.8992 8.03289Z" fill="#0099D4"/>
+                </svg>
+            </span>
+            <span class="fls-delivery-method__note-text">
+				<?php esc_html_e( 'Your sample order will be delivered within the next two working days — no date selection needed.', 'fls-checkout-flow' ); ?>
+            </span>
+        </div>
+		<?php
+	}
+
 	private function render_shipping_rate_card( $shipping_rate_data, $mode ) {
 		$rate          = $shipping_rate_data['rate'];
 		$title         = $this->get_rate_primary_label( $rate );
@@ -1199,6 +1263,10 @@ class FLS_Checkout_Flow {
 			return $grouped;
 		}
 
+		// Sample-only carts never ask for a delivery date, so their delivery cards
+		// keep showing the price instead of the calendar affordance.
+		$samples_only = $this->cart_has_only_samples();
+
 		foreach ( $packages as $package_index => $package ) {
 			$rates = isset( $package['rates'] ) ? $package['rates'] : array();
 
@@ -1217,7 +1285,7 @@ class FLS_Checkout_Flow {
 					'rate_id'       => $rate_id,
 					'input_id'      => $input_id,
 					'checked'       => $default_value === $rate_id,
-					'requires_date' => $this->rate_requires_date( $rate ),
+					'requires_date' => ( $samples_only && 'delivery' === $mode ) ? false : $this->rate_requires_date( $rate ),
 					'rate'          => $rate,
 				);
 			}
@@ -1374,7 +1442,9 @@ class FLS_Checkout_Flow {
 				return;
 			}
 
-			if ( empty( $delivery_date ) ) {
+			// Sample-only orders ship on a fixed two-working-day promise, so no
+			// date is collected for them.
+			if ( empty( $delivery_date ) && ! $this->cart_has_only_samples() ) {
 				wc_add_notice( __( 'Please choose a date for your delivery method.', 'fls-checkout-flow' ), 'error' );
 			}
 		}

@@ -1955,6 +1955,52 @@
     color: #b91c1c;
 }
 
+/* -------------------------------------------------------
+ * Delivery info note (sample-only orders)
+ * ------------------------------------------------------- */
+.fls-delivery-method__note {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: #EFF8FF;
+    border: 1px solid #B2DDFF;
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+.fls-delivery-method__note-icon {
+    flex-shrink: 0;
+    display: inline-flex;
+    width: 44px;
+    height: 44px;
+}
+
+.fls-delivery-method__note-icon svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.fls-delivery-method__note-text {
+    color: #175CD3;
+    font-weight: 500;
+}
+
+@media (max-width: 599px) {
+    .fls-delivery-method__note {
+        align-items: flex-start;
+        gap: 12px;
+        font-size: 14px;
+    }
+
+    .fls-delivery-method__note-icon {
+        width: 36px;
+        height: 36px;
+    }
+}
+
 
 .woocommerce-privacy-policy-link {
     color: #125CBB;

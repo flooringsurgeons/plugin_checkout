@@ -460,6 +460,12 @@
             return $('[data-fls-shipping-card][data-mode="' + mode + '"]').length > 0;
         },
 
+        // Sample-only carts render no date picker for delivery — the two-working-day
+        // note replaces it, so a date must not be required for that mode.
+        requiresDate(mode) {
+            return $('[data-fls-date-wrap="' + mode + '"]').length > 0;
+        },
+
         selectedCard(mode) {
             const $input = $('[data-fls-shipping-card][data-mode="' + mode + '"] .shipping_method:checked').first();
             return $input.length ? $input.closest('[data-fls-shipping-card]') : $();
@@ -505,7 +511,7 @@
         syncHiddenFields() {
             const mode = this.getMode();
             $('[data-fls-delivery-mode-input]').val(mode);
-            $('[data-fls-delivery-date-input]').val(this.getDate(mode));
+            $('[data-fls-delivery-date-input]').val(this.requiresDate(mode) ? this.getDate(mode) : '');
         },
 
         syncUi() {
@@ -699,7 +705,8 @@
         stepTwo() {
             if (!Delivery.needsShipping()) return true;
             const mode = Delivery.getMode();
-            return Delivery.selectedCard(mode).length > 0 && !!Delivery.getDate(mode);
+            if (!Delivery.selectedCard(mode).length) return false;
+            return !Delivery.requiresDate(mode) || !!Delivery.getDate(mode);
         },
 
         maybeDowngrade() {
@@ -892,7 +899,7 @@
                     this.go(2);
                     return;
                 }
-                if (!Delivery.getDate(mode)) {
+                if (Delivery.requiresDate(mode) && !Delivery.getDate(mode)) {
                     $('[data-fls-date-wrap="' + mode + '"]').addClass('is-invalid');
                     this.showNotice('error', Config.i18n('stepTwoDateError', 'Please choose a date before continuing.'));
                     this.go(2);
