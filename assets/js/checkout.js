@@ -2,31 +2,10 @@
     'use strict';
 
     // -- Bank Holidays ----------------------------------------------------------
-    // Add or remove dates here (YYYY-MM-DD format, England & Wales).
-    const BANK_HOLIDAYS = [
-        // 2026
-        '2026-08-31', // Summer bank holiday
-        '2026-12-25', // Christmas Day
-        '2026-12-28', // Boxing Day (substitute day)
-        // 2027
-        '2027-01-01', // New Year's Day
-        '2027-03-26', // Good Friday
-        '2027-03-29', // Easter Monday
-        '2027-05-03', // Early May bank holiday
-        '2027-05-31', // Spring bank holiday
-        '2027-08-30', // Summer bank holiday
-        '2027-12-27', // Christmas Day (substitute day)
-        '2027-12-28', // Boxing Day (substitute day)
-        // 2028
-        '2028-01-03', // New Year's Day (substitute day)
-        '2028-04-14', // Good Friday
-        '2028-04-17', // Easter Monday
-        '2028-05-01', // Early May bank holiday
-        '2028-05-29', // Spring bank holiday
-        '2028-08-28', // Summer bank holiday
-        '2028-12-25', // Christmas Day
-        '2028-12-26', // Boxing Day
-    ];
+    // Maintained in PHP (FLS_Checkout_Flow::get_bank_holidays) and localized here,
+    // so the calendar and the server-side delivery date share one list.
+    const LOCALIZED_HOLIDAYS = window.flsCheckoutFlow && window.flsCheckoutFlow.bankHolidays;
+    const BANK_HOLIDAYS = Array.isArray(LOCALIZED_HOLIDAYS) ? LOCALIZED_HOLIDAYS : [];
 
     function isBankHoliday(date) {
         const y = date.getFullYear();

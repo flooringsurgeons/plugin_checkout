@@ -2,6 +2,12 @@
 defined( 'ABSPATH' ) || exit;
 
 class FLS_Checkout_Flow {
+	/** Orders placed after this UK hour are processed on the next working day. */
+	const DISPATCH_CUTOFF_HOUR = 14;
+
+	/** Working days between the processing day and the delivery date. */
+	const WORKING_DAYS_LEAD = 2;
+
 	private static $instance = null;
 	private $suppress_new_account_email = false;
 
@@ -195,7 +201,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/js/checkout.js',
 			array( 'jquery', 'wc-checkout', 'fls-checkout-flow-flatpickr' ),
-			'2.8.51',
+			'2.8.52',
 			true
 		);
 
@@ -223,6 +229,7 @@ class FLS_Checkout_Flow {
 			array(
 				'activeStep'        => 1,
 				'backorderMinDate'  => $backorder_min_date,
+				'bankHolidays'      => $this->get_bank_holidays(),
 				'coupon'     => array(
 					'applyNonce'  => wp_create_nonce( 'apply-coupon' ),
 					'removeNonce' => wp_create_nonce( 'remove-coupon' ),
@@ -1405,6 +1412,86 @@ class FLS_Checkout_Flow {
 		return ( new DateTimeImmutable( '@' . $timestamp ) )->setTimezone( $timezone );
 	}
 
+	/**
+	 * Bank holidays (England & Wales) excluded from working-day calculations.
+	 *
+	 * This is the single source of truth — the checkout script receives the same
+	 * list through wp_localize_script so the calendar and the server-side date
+	 * calculation can never drift apart.
+	 *
+	 * @return string[] Y-m-d dates.
+	 */
+	private function get_bank_holidays() {
+		$holidays = array(
+			// 2026.
+			'2026-08-31', // Summer bank holiday.
+			'2026-12-25', // Christmas Day.
+			'2026-12-28', // Boxing Day (substitute day).
+			// 2027.
+			'2027-01-01', // New Year's Day.
+			'2027-03-26', // Good Friday.
+			'2027-03-29', // Easter Monday.
+			'2027-05-03', // Early May bank holiday.
+			'2027-05-31', // Spring bank holiday.
+			'2027-08-30', // Summer bank holiday.
+			'2027-12-27', // Christmas Day (substitute day).
+			'2027-12-28', // Boxing Day (substitute day).
+			// 2028.
+			'2028-01-03', // New Year's Day (substitute day).
+			'2028-04-14', // Good Friday.
+			'2028-04-17', // Easter Monday.
+			'2028-05-01', // Early May bank holiday.
+			'2028-05-29', // Spring bank holiday.
+			'2028-08-28', // Summer bank holiday.
+			'2028-12-25', // Christmas Day.
+			'2028-12-26', // Boxing Day.
+		);
+
+		return (array) apply_filters( 'fls_checkout_bank_holidays', $holidays );
+	}
+
+	private function is_working_day( DateTimeImmutable $date, array $holidays ) {
+		if ( (int) $date->format( 'N' ) >= 6 ) {
+			return false;
+		}
+
+		return ! in_array( $date->format( 'Y-m-d' ), $holidays, true );
+	}
+
+	/**
+	 * The delivery date promised to customers who are not shown a calendar.
+	 *
+	 * Mirrors the calendar's minimum selectable date: orders placed after the
+	 * cutoff (or on a non-working day) start processing on the next working day,
+	 * then two further working days are added.
+	 *
+	 * @return DateTimeImmutable
+	 */
+	private function get_promised_delivery_date() {
+		$holidays = $this->get_bank_holidays();
+		$now      = new DateTimeImmutable( 'now', new DateTimeZone( 'Europe/London' ) );
+		$start    = $now->setTime( 0, 0 );
+
+		if ( (int) $now->format( 'G' ) >= self::DISPATCH_CUTOFF_HOUR || ! $this->is_working_day( $start, $holidays ) ) {
+			do {
+				$start = $start->modify( '+1 day' );
+			} while ( ! $this->is_working_day( $start, $holidays ) );
+		}
+
+		$date  = $start;
+		$added = 0;
+
+		while ( $added < self::WORKING_DAYS_LEAD ) {
+			$date = $date->modify( '+1 day' );
+
+			if ( $this->is_working_day( $date, $holidays ) ) {
+				++$added;
+			}
+		}
+
+		return $date;
+	}
+
 	private function is_weekend_checkout_date( $date ) {
 		$datetime = $this->parse_checkout_date( $date );
 		if ( ! $datetime ) {
@@ -1453,6 +1540,13 @@ class FLS_Checkout_Flow {
 	public function save_step_two_fields( $order, $data ) {
 		$delivery_mode = ! empty( $_POST['fls_delivery_mode'] ) ? sanitize_text_field( wp_unslash( $_POST['fls_delivery_mode'] ) ) : '';
 		$delivery_date = ! empty( $_POST['fls_delivery_date'] ) ? sanitize_text_field( wp_unslash( $_POST['fls_delivery_date'] ) ) : '';
+
+		// Sample-only deliveries are never shown a calendar, so stamp the date we
+		// promised them in checkout. Without this the order would reach the theme
+		// and the CRM with no fulfilment date at all.
+		if ( empty( $delivery_date ) && 'pickup' !== $delivery_mode && $this->cart_has_only_samples() ) {
+			$delivery_date = $this->get_promised_delivery_date()->format( 'F j, Y' );
+		}
 
 		if ( $delivery_mode ) {
 			$order->update_meta_data( '_fls_delivery_mode', $delivery_mode );
@@ -1661,6 +1755,7 @@ class FLS_Checkout_Flow {
 
 		WC()->session->set( 'fls_calculated_shipping_postcode', '' );
 		WC()->session->set( 'fls_calculated_shipping_amount', null );
+		WC()->session->set( 'fls_calculated_shipping_region', null );
 		WC()->session->set( 'fls_delivery_available', null );
 		WC()->session->set( 'fls_free_shipping', null );
 		WC()->session->__unset( 'custom_shipping_choice' );
@@ -2012,10 +2107,64 @@ class FLS_Checkout_Flow {
 			if ( ! $product || ! $product->exists() || $quantity <= 0 ) {
 				continue;
 			}
+
+			// Measure the discounted amount: WooCommerce writes line_total during
+			// calculate_item_totals(), which runs before shipping is calculated, so
+			// any applied coupon is already reflected here. A coupon that drops the
+			// cart below the threshold must also drop free shipping.
+			if ( isset( $cart_item['line_total'] ) ) {
+				$line_amount = (float) $cart_item['line_total'];
+
+				// Keep the same tax basis the threshold was configured against:
+				// when catalog prices include tax, compare tax-inclusive amounts.
+				if ( wc_prices_include_tax() ) {
+					$line_amount += isset( $cart_item['line_tax'] ) ? (float) $cart_item['line_tax'] : 0.0;
+				}
+
+				$cart_subtotal += $line_amount;
+				continue;
+			}
+
+			// Totals have not been calculated yet — fall back to the raw price.
 			$cart_subtotal += (float) $product->get_price() * $quantity;
 		}
 
 		return $cart_subtotal >= $free_threshold;
+	}
+
+	/**
+	 * Recalculate the free-shipping flag from the current cart and persist it.
+	 *
+	 * The flag used to be written only when the postcode was calculated, so any
+	 * later cart change (most visibly applying or removing a coupon) left a stale
+	 * "free shipping" behind. Recalculating at the point the rates are built keeps
+	 * the flag in step with the discounted cart total.
+	 *
+	 * @return bool
+	 */
+	private function refresh_free_shipping_flag() {
+		if ( ! WC()->session || ! WC()->cart ) {
+			return false;
+		}
+
+		$postcode = WC()->session->get( 'fls_calculated_shipping_postcode' );
+		$amount   = WC()->session->get( 'fls_calculated_shipping_amount' );
+		$region   = WC()->session->get( 'fls_calculated_shipping_region' );
+
+		// Nothing calculated yet — leave whatever the session holds untouched.
+		// The region must come from the session too: resolving it from the postcode
+		// costs a remote postcodes.io call, and this runs on every rate calculation.
+		if ( empty( $postcode ) || null === $amount || empty( $region ) ) {
+			return (bool) WC()->session->get( 'fls_free_shipping' );
+		}
+
+		// A zero base amount means the cart ships free on its own (sample-only
+		// carts), independently of the threshold.
+		$is_free = ( (float) $amount <= 0 ) || $this->cart_qualifies_for_free_shipping( $region );
+
+		WC()->session->set( 'fls_free_shipping', $is_free );
+
+		return $is_free;
 	}
 
 	/**
@@ -2044,6 +2193,7 @@ class FLS_Checkout_Flow {
 		if ( null === $resolved_region ) {
 			WC()->session->set( 'fls_calculated_shipping_postcode', '' );
 			WC()->session->set( 'fls_calculated_shipping_amount', null );
+			WC()->session->set( 'fls_calculated_shipping_region', null );
 			WC()->session->set( 'fls_delivery_available', null );
 			WC()->session->set( 'fls_free_shipping', null );
 			WC()->session->__unset( 'custom_shipping_choice' );
@@ -2067,6 +2217,9 @@ class FLS_Checkout_Flow {
 
 		WC()->session->set( 'fls_calculated_shipping_postcode', $postcode );
 		WC()->session->set( 'fls_calculated_shipping_amount', $calculated_amount );
+		// Cached so later recalculations (e.g. after a coupon) can re-check the
+		// free-shipping threshold without another postcodes.io lookup.
+		WC()->session->set( 'fls_calculated_shipping_region', $resolved_region );
 		WC()->session->set( 'fls_delivery_available', $delivery_available );
 		WC()->session->set( 'fls_free_shipping', $is_free );
 
@@ -2165,7 +2318,9 @@ class FLS_Checkout_Flow {
 		$clean_postcode = strtoupper( preg_replace( '/\s+/', '', (string) $postcode ) );
 		$outward_code   = preg_replace( '/\d[A-Z]{2}$/', '', $clean_postcode );
 
-		$is_free   = (bool) WC()->session->get( 'fls_free_shipping' );
+		// Recalculate rather than trusting the flag stored at postcode time — the
+		// cart total may have moved since (e.g. a coupon was applied).
+		$is_free   = $this->refresh_free_shipping_flag();
 		$new_rates = array();
 
 		if ( $is_free ) {
