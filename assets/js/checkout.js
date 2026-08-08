@@ -218,30 +218,6 @@
             return $s;
         },
 
-        position() {
-            const $stack = this._stack();
-            if (!$stack.length) return;
-
-            if (window.matchMedia('(max-width: 991px)').matches) {
-                const barH = $('#fls-mobile-total-bar').outerHeight(true) || 0;
-                const bottom = (barH > 0 ? barH + 8 : 12) + 'px';
-                $stack.css({ top: 'auto', bottom: bottom, left: '12px', right: '12px', width: 'auto', maxWidth: 'none' });
-                return;
-            }
-
-            const $card = $('#fls-checkout-order-details .fls-order-details__card').first();
-            if (!$card.length) {
-                $stack.css({ top: '20px', bottom: 'auto', left: 'auto', right: '20px', width: '360px', maxWidth: 'calc(100vw - 24px)' });
-                return;
-            }
-
-            const rect = $card.get(0).getBoundingClientRect();
-            const pad = 16;
-            const left = Math.max(rect.left, pad);
-            const width = Math.min(rect.width, window.innerWidth - left - pad);
-            $stack.css({ top: (rect.bottom + 16) + 'px', bottom: 'auto', left: left + 'px', right: 'auto', width: width + 'px', maxWidth: 'none' });
-        },
-
         clear() {
             $('[data-fls-toast]').remove();
         },
@@ -256,13 +232,13 @@
                 '<span class="fls-checkout-toast__text">' + DOM.safeHtml(message) + '</span>' +
                 '</div>'
             );
+            // Appending keeps newer toasts below older ones in the top-anchored stack.
             this._stack().append($toast);
-            this.position();
             requestAnimationFrame(function () { $toast.addClass('is-visible'); });
             setTimeout(function () {
                 $toast.removeClass('is-visible');
                 setTimeout(function () { $toast.remove(); }, 240);
-            }, 3500);
+            }, 5000);
         },
 
         parseWcResponse(response, fallbackType, fallbackMessage) {
@@ -280,6 +256,28 @@
                 if ($el.length) return { type: msgType, message: $.trim($el.text()) || fallbackMessage || '' };
             }
             return { type: fallbackType || 'success', message: fallbackMessage || $.trim($m.text()) || '' };
+        }
+    };
+
+    // -- Flash ------------------------------------------------------------------
+    // One-off notices the server queues during update_checkout (e.g. a coupon that
+    // pushed the cart under the free-shipping threshold). The server only emits
+    // each one once, so this just relays whatever arrived on the carrier element.
+
+    const Flash = {
+        consume() {
+            const $el = $('#fls-checkout-flash').first();
+            if (!$el.length) return;
+
+            const message = $.trim($el.attr('data-fls-flash-message') || '');
+            if (!message) return;
+
+            const type = $.trim($el.attr('data-fls-flash-type') || '') || 'notice';
+
+            // Blank the carrier first: a later fragment replace that WooCommerce
+            // skips as unchanged would otherwise replay the same notice.
+            $el.attr('data-fls-flash-message', '').attr('data-fls-flash-type', '');
+            Toast.show(type, message);
         }
     };
 
@@ -1632,19 +1630,12 @@
         initDeliveryState();
         Validation.maybeDowngrade();
         Steps.go(Steps.active(), { immediate: !!immediate });
-        Toast.position();
         Payment.sync();
         MobileTotalBar.init();
 
         const prefilled = $.trim($('#billing_email').val() || '');
         if (prefilled) AccountCheck.check(prefilled);
     }
-
-    $(window)
-        .off('resize.flsToastPosition scroll.flsToastPosition')
-        .on('resize.flsToastPosition scroll.flsToastPosition', function () {
-            Toast.position();
-        });
 
     $(document.body).on('updated_checkout', function () {
         if (State.get().calculatingShipping) {
@@ -1682,7 +1673,7 @@
             }
         }
 
-        setTimeout(function () { Toast.position(); }, 60);
+        Flash.consume();
     });
 
     $(function () {

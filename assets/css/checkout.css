@@ -1573,14 +1573,24 @@
     font-size: 0.88em;
 }
 
+/* Pinned to the top of the viewport rather than trailing the order summary card,
+   which on a long checkout page pushed toasts below the fold. Stays put on scroll,
+   so no JS repositioning is involved. */
 .fls-checkout-toast-stack {
     position: fixed;
-    z-index: 99999;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999999;
     display: grid;
     gap: 12px;
-    width: 360px;
+    width: 420px;
     max-width: calc(100vw - 24px);
     pointer-events: none;
+}
+
+body.admin-bar .fls-checkout-toast-stack {
+    top: 56px;
 }
 
 .fls-checkout-toast {
@@ -1711,12 +1721,16 @@
 
 @media (max-width: 991px) {
     .fls-checkout-toast-stack {
-        left: 12px !important;
-        right: 12px !important;
-        bottom: 76px !important;
-        top: auto !important;
-        width: auto !important;
+        top: 12px;
+        left: 12px;
+        right: 12px;
+        transform: none;
+        width: auto;
         max-width: none;
+    }
+
+    body.admin-bar .fls-checkout-toast-stack {
+        top: 58px;
     }
 }
 

@@ -186,7 +186,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/css/checkout.css',
 			array( 'fls-checkout-flow-flatpickr' ),
-			'2.9.31'
+			'2.9.34'
 		);
 
 		wp_enqueue_script(
@@ -201,7 +201,7 @@ class FLS_Checkout_Flow {
 			'fls-checkout-flow',
 			FLS_CHECKOUT_FLOW_URL . 'assets/js/checkout.js',
 			array( 'jquery', 'wc-checkout', 'fls-checkout-flow-flatpickr' ),
-			'2.8.52',
+			'2.8.55',
 			true
 		);
 
@@ -387,8 +387,55 @@ class FLS_Checkout_Flow {
 		$fragments['#fls-checkout-order-details']                  = $this->get_order_details_html();
 		$fragments['#fls-checkout-shipping-methods']               = $this->get_shipping_methods_html();
 		$fragments['.fls-checkout-step__section--shipping-fields'] = $this->get_shipping_customer_section_html( $checkout );
+		$fragments['#fls-checkout-flash']                          = $this->get_checkout_flash_html();
 
 		return $fragments;
+	}
+
+	/**
+	 * Hidden carrier element the JS reads after update_checkout to raise a one-off toast.
+	 *
+	 * Consuming the queued notice here is what makes the toast fire once per event
+	 * rather than on every checkout refresh.
+	 */
+	public function get_checkout_flash_html() {
+		$type    = '';
+		$message = '';
+
+		if ( WC()->session && 'pending' === WC()->session->get( 'fls_free_shipping_coupon_notice' ) ) {
+			WC()->session->__unset( 'fls_free_shipping_coupon_notice' );
+
+			$threshold = fls_get_free_shipping_threshold();
+			$decimals  = ( fmod( $threshold, 1.0 ) > 0 ) ? wc_get_price_decimals() : 0;
+			$formatted = html_entity_decode(
+				wp_strip_all_tags( wc_price( $threshold, array( 'decimals' => $decimals ) ) ),
+				ENT_QUOTES,
+				get_bloginfo( 'charset' )
+			);
+
+			$type    = 'notice';
+			$message = sprintf(
+				/* translators: %s: free shipping threshold amount, e.g. £500. */
+				__( 'After applying your discount code, your order total fell below %s, so delivery charges now apply.', 'fls-checkout-flow' ),
+				$formatted
+			);
+		}
+
+		// WooCommerce skips replaceWith() for a fragment whose HTML is byte-identical
+		// to the previous response, so a repeat of the same notice needs to differ.
+		$sequence = '';
+
+		if ( '' !== $message && WC()->session ) {
+			$sequence = (int) WC()->session->get( 'fls_checkout_flash_sequence' ) + 1;
+			WC()->session->set( 'fls_checkout_flash_sequence', $sequence );
+		}
+
+		return sprintf(
+			'<div id="fls-checkout-flash" hidden data-fls-flash-seq="%1$s" data-fls-flash-type="%2$s" data-fls-flash-message="%3$s"></div>',
+			esc_attr( $sequence ),
+			esc_attr( $type ),
+			esc_attr( $message )
+		);
 	}
 
 	public function get_cart_items_count_label(): string {
@@ -1763,6 +1810,9 @@ class FLS_Checkout_Flow {
 		WC()->session->__unset( 'custom_delivery_price' );
 		WC()->session->__unset( 'custom_delivery_label' );
 		WC()->session->__unset( 'custom_delivery_class' );
+		// Drop any notice queued but never rendered, so a fresh page load cannot
+		// surface a toast about a coupon the customer applied in an earlier visit.
+		WC()->session->__unset( 'fls_free_shipping_coupon_notice' );
 
 		// Invalidate WC shipping rate transient cache so WC recalculates
 		// rates from scratch on this fresh page load.
@@ -2067,36 +2117,73 @@ class FLS_Checkout_Flow {
 	 * @return bool
 	 */
 	private function cart_qualifies_for_free_shipping( $region = null ) {
+		if ( null === $this->get_eligible_free_shipping_region( $region ) ) {
+			return false;
+		}
+
+		return $this->get_free_shipping_qualifying_subtotal( true ) >= fls_get_free_shipping_threshold();
+	}
+
+	/**
+	 * Resolve the region and confirm the free-shipping threshold can apply to it.
+	 *
+	 * @param string|null $region Already-resolved UK region key, or null to resolve from session postcode.
+	 * @return string|null Eligible region key, or null when the threshold cannot apply at all.
+	 */
+	private function get_eligible_free_shipping_region( $region = null ) {
 		$settings       = $this->get_post_price_settings();
 		$free_threshold = fls_get_free_shipping_threshold();
 
 		if ( $free_threshold <= 0 || ! WC()->cart ) {
-			return false;
+			return null;
 		}
 
 		// Check if the current region is eligible for free shipping.
 		$free_regions = isset( $settings['free_shipping_regions'] ) ? (array) $settings['free_shipping_regions'] : array();
 
 		if ( empty( $free_regions ) ) {
-			return false;
+			return null;
 		}
 
 		if ( null === $region ) {
 			$postcode = WC()->session ? WC()->session->get( 'fls_calculated_shipping_postcode' ) : '';
 
 			if ( empty( $postcode ) ) {
-				return false;
+				return null;
 			}
 
 			$region = $this->get_uk_region_for_postcode( $postcode );
 		}
 
 		if ( ! in_array( $region, $free_regions, true ) ) {
-			return false;
+			return null;
 		}
 
-		// Only count non-sample items toward the free-shipping threshold.
-		// Sample products should never contribute to unlocking free shipping.
+		return $region;
+	}
+
+	/**
+	 * Sum the cart lines that count toward the free-shipping threshold.
+	 *
+	 * Only non-sample items count — sample products should never contribute to
+	 * unlocking free shipping.
+	 *
+	 * @param bool $after_coupons Whether to measure the coupon-discounted amount.
+	 *                            False measures the line subtotal, i.e. what the
+	 *                            cart would be worth with no coupon applied.
+	 * @return float
+	 */
+	private function get_free_shipping_qualifying_subtotal( $after_coupons = true ) {
+		if ( ! WC()->cart ) {
+			return 0.0;
+		}
+
+		// WooCommerce writes both keys during calculate_item_totals(), which runs
+		// before shipping is calculated, so an applied coupon is already reflected
+		// in line_total while line_subtotal still holds the pre-coupon amount.
+		$total_key = $after_coupons ? 'line_total' : 'line_subtotal';
+		$tax_key   = $after_coupons ? 'line_tax' : 'line_subtotal_tax';
+
 		$cart_subtotal = 0.0;
 		foreach ( WC()->cart->get_cart() as $cart_item ) {
 			if ( ! empty( $cart_item['sample_product'] ) ) {
@@ -2108,17 +2195,15 @@ class FLS_Checkout_Flow {
 				continue;
 			}
 
-			// Measure the discounted amount: WooCommerce writes line_total during
-			// calculate_item_totals(), which runs before shipping is calculated, so
-			// any applied coupon is already reflected here. A coupon that drops the
-			// cart below the threshold must also drop free shipping.
-			if ( isset( $cart_item['line_total'] ) ) {
-				$line_amount = (float) $cart_item['line_total'];
+			// A coupon that drops the cart below the threshold must also drop free
+			// shipping, so the discounted amount is what the threshold is tested against.
+			if ( isset( $cart_item[ $total_key ] ) ) {
+				$line_amount = (float) $cart_item[ $total_key ];
 
 				// Keep the same tax basis the threshold was configured against:
 				// when catalog prices include tax, compare tax-inclusive amounts.
 				if ( wc_prices_include_tax() ) {
-					$line_amount += isset( $cart_item['line_tax'] ) ? (float) $cart_item['line_tax'] : 0.0;
+					$line_amount += isset( $cart_item[ $tax_key ] ) ? (float) $cart_item[ $tax_key ] : 0.0;
 				}
 
 				$cart_subtotal += $line_amount;
@@ -2129,7 +2214,61 @@ class FLS_Checkout_Flow {
 			$cart_subtotal += (float) $product->get_price() * $quantity;
 		}
 
-		return $cart_subtotal >= $free_threshold;
+		return $cart_subtotal;
+	}
+
+	/**
+	 * Whether an applied coupon is the reason the cart no longer ships free.
+	 *
+	 * True only when the cart would still clear the threshold without its coupons
+	 * but falls short with them — so a cart that never qualified, a region without
+	 * free shipping, and a cart that shipped free for another reason (sample-only)
+	 * are all excluded.
+	 *
+	 * @param string|null $region Already-resolved UK region key, or null to resolve from session postcode.
+	 * @return bool
+	 */
+	private function cart_lost_free_shipping_to_coupon( $region = null ) {
+		if ( ! WC()->cart || ! WC()->session ) {
+			return false;
+		}
+
+		if ( empty( WC()->cart->get_applied_coupons() ) ) {
+			return false;
+		}
+
+		// A customer collecting in store pays no delivery either way, so telling them
+		// delivery charges now apply would be wrong. The session still holds the
+		// selection made before this recalculation, which is the one to judge on.
+		$chosen_methods = (array) WC()->session->get( 'chosen_shipping_methods', array() );
+
+		foreach ( $chosen_methods as $method_id ) {
+			if ( false !== strpos( (string) $method_id, 'local_pickup' ) ) {
+				return false;
+			}
+		}
+
+		// Delivery has to be chargeable in the first place: an unserviced region has
+		// no rate to lose, and a zero base amount (sample-only cart) ships free on
+		// its own regardless of the threshold.
+		if ( ! WC()->session->get( 'fls_delivery_available' ) ) {
+			return false;
+		}
+
+		$amount = WC()->session->get( 'fls_calculated_shipping_amount' );
+
+		if ( null === $amount || (float) $amount <= 0 ) {
+			return false;
+		}
+
+		if ( null === $this->get_eligible_free_shipping_region( $region ) ) {
+			return false;
+		}
+
+		$free_threshold = fls_get_free_shipping_threshold();
+
+		return $this->get_free_shipping_qualifying_subtotal( false ) >= $free_threshold
+			&& $this->get_free_shipping_qualifying_subtotal( true ) < $free_threshold;
 	}
 
 	/**
@@ -2158,9 +2297,19 @@ class FLS_Checkout_Flow {
 			return (bool) WC()->session->get( 'fls_free_shipping' );
 		}
 
+		$was_free = (bool) WC()->session->get( 'fls_free_shipping' );
+
 		// A zero base amount means the cart ships free on its own (sample-only
 		// carts), independently of the threshold.
 		$is_free = ( (float) $amount <= 0 ) || $this->cart_qualifies_for_free_shipping( $region );
+
+		// Queue the warning on the edge only — the moment free shipping is actually
+		// lost, and only when a coupon is what pushed the cart under the threshold.
+		// Reading it as a transition keeps the toast from re-firing on every later
+		// update_checkout while the same coupon stays applied.
+		if ( $was_free && ! $is_free && $this->cart_lost_free_shipping_to_coupon( $region ) ) {
+			WC()->session->set( 'fls_free_shipping_coupon_notice', 'pending' );
+		}
 
 		WC()->session->set( 'fls_free_shipping', $is_free );
 

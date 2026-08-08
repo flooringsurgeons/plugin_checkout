@@ -210,5 +210,8 @@ if (! $checkout->is_registration_enabled() && $checkout->is_registration_require
     </div>
 
     <?php do_action('fls_checkout_after_layout', $checkout); ?>
+
+    <?= $flow->get_checkout_flash_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+    ?>
 </form>
 <?php do_action('woocommerce_after_checkout_form', $checkout); ?>
